@@ -5,6 +5,8 @@
 #include <cstdlib>
 #include <iomanip>
 
+namespace
+{
 struct Config
 {
     std::string m_input_file_path = "";
@@ -159,7 +161,7 @@ void print_usage(const char* program_name)
     std::cerr << "  -m\tCount characters\n";
     std::cerr << "\nIf FILE is not provided, standard input is used.\n";
 }
-
+}   // namespace
 int main(int argc, char **argv)
 {
     std::setlocale(LC_ALL, "");
