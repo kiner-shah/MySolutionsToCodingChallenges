@@ -29,13 +29,12 @@ bool parse_json(std::istream& input)
 {
     kjson::Tokenizer tokenizer;
     auto token_sequence = tokenizer.tokenize(input);
-    std::cout << "Tokens size: " << (token_sequence.size() * sizeof(kjson::Token)) << '\n';
     // kjson::Parser parser;
     // return parser.parse(token_sequence);
-    // for (const auto& token : token_sequence)
-    // {
-    //     std::cout << token << '\n';
-    // }
+    for (const auto& token : token_sequence)
+    {
+        std::cout << token << '\n';
+    }
     return true;
 }
 }   // namespace
