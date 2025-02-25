@@ -20,10 +20,14 @@ enum class LeftSideNonTerminal
     string
 };
 
+std::string left_side_non_terminal_to_string(LeftSideNonTerminal non_terminal);
+
 struct RightSideTerminal
 {
     TokenType m_token_type;
     bool has_epsilon_value; // True if the token type can have empty value, false otherwise
+
+    friend std::ostream& operator<<(std::ostream& os, const RightSideTerminal& terminal);
 };
 
 RightSideTerminal make_right_side_terminal(TokenType type, bool has_epsilon_value);
@@ -36,8 +40,11 @@ class Parser
 
     RuleMap m_rule_map;
 
+    void print_rule(LeftSideNonTerminal non_terminal, const Rule& rule) const;
+    [[nodiscard]] bool parse_json(const std::vector<Token>& tokens, size_t& token_index, size_t indent_level, LeftSideNonTerminal non_terminal);
+
 public:
     Parser();
-    bool parse(const std::vector<Token>& tokens);
+    [[nodiscard]] bool parse(const std::vector<Token>& tokens);
 };
 }   // namespace kjson

@@ -16,11 +16,11 @@ std::string token_type_to_string(TokenType type)
         case TokenType::dbl_quote: return "DOUBLE_QUOTE";
         case TokenType::colon: return "COLON";
         case TokenType::comma: return "COMMA";
-        case TokenType::whitespace: return "WHITESPACE";
-        case TokenType::string_value: return "STRING";
-        case TokenType::boolean_value: return "BOOLEAN";
-        case TokenType::numeric_value: return "NUMERIC";
-        case TokenType::null_value: return "NULL";
+        case TokenType::whitespace: return "WHITESPACE_VALUE";
+        case TokenType::string_value: return "STRING_VALUE";
+        case TokenType::boolean_value: return "BOOLEAN_VALUE";
+        case TokenType::numeric_value: return "NUMERIC_VALUE";
+        case TokenType::null_value: return "NULL_VALUE";
     }
     return "UNKNOWN";
 }
@@ -37,7 +37,7 @@ std::ostream& operator<<(std::ostream& os, const Token& token)
     {
         if (std::isspace(c))
         {
-            os << "0x" << std::setfill('0') << std::setw(2) << std::hex << static_cast<int>(c) << std::dec;
+            os << std::setfill('0') << std::setw(2) << std::hex << static_cast<int>(c) << std::dec;
         }
         else
         {
@@ -51,17 +51,30 @@ std::ostream& operator<<(std::ostream& os, const Token& token)
 bool Tokenizer::handle_string(std::istream& is, char first_char, std::string& string_token)
 {
     char c;
-    while (is >> c)
+    while (is.get(c))
     {
         if (c == '"')
         {
             return true;
         }
+        // Case when whitespace is not allowed in string except space (0x20)
+        if (c == 0x09 || c == 0x0A || c == 0x09)
+        {
+            return false;
+        }
         if (c == '\\')
         {
             char next_char;
             // Escape character encountered
-            if (!(is >> next_char))
+            if (!(is.get(next_char)))
+            {
+                return false;
+            }
+
+            // Case of '\0'
+            if (!(next_char == '"' || next_char == '\\' || next_char == '/'
+                || next_char == 'b' || next_char == 'f' || next_char == 'n'
+                || next_char == 'r' || next_char == 't' || next_char == 'u'))
             {
                 return false;
             }
@@ -76,7 +89,7 @@ bool Tokenizer::handle_string(std::istream& is, char first_char, std::string& st
 
                 while (counter < 4)
                 {
-                    if (!(is >> unicode_hex_char))
+                    if (!(is.get(unicode_hex_char)))
                     {
                         return false;
                     }
@@ -85,6 +98,7 @@ bool Tokenizer::handle_string(std::istream& is, char first_char, std::string& st
                         return false;
                     }
                     string_token += unicode_hex_char;
+                    counter++;
                 }
             }
         }
@@ -102,12 +116,12 @@ bool Tokenizer::handle_integer(std::istream& is, char first_char, std::string& s
     if (first_char == '-')
     {
         string_token += first_char;
-        while (is >> c)
+        while (is.get(c))
         {
             if (c == '0')
             {
                 string_token += c;
-                if (!(is >> c))
+                if (!(is.get(c)))
                 {
                     return false;
                 }
@@ -125,7 +139,7 @@ bool Tokenizer::handle_integer(std::istream& is, char first_char, std::string& s
     else if (first_char >= '1' && first_char <= '9')
     {
         string_token += first_char;
-        while (is >> c)
+        while (is.get(c))
         {
             if (std::isdigit(c) == 0)
             {
@@ -138,7 +152,7 @@ bool Tokenizer::handle_integer(std::istream& is, char first_char, std::string& s
     else if (first_char == '0')
     {
         string_token += first_char;
-        if (!(is >> c))
+        if (!(is.get(c)))
         {
             return false;
         }
@@ -168,7 +182,7 @@ bool Tokenizer::handle_fraction(std::istream& is, char first_char, std::string& 
     string_token += first_char;
 
     char c;
-    while (is >> c)
+    while (is.get(c))
     {
         if (std::isdigit(c) == 0)
         {
@@ -186,21 +200,38 @@ bool Tokenizer::handle_exponent(std::istream& is, char first_char, std::string& 
     if (first_char == 'e' || first_char == 'E')
     {
         string_token += first_char;
+        last_read_char = first_char;
         bool sign_char_encountered = false;
-        while (is >> c)
+        bool digit_encountered = false;
+
+        while (is.get(c))
         {
             if (!sign_char_encountered && (c == '-' || c == '+'))
             {
                 string_token += c;
+                last_read_char = c;
                 sign_char_encountered = true;
                 continue;
+            }
+            if (sign_char_encountered && (c == '-' || c == '+'))
+            {
+                return false;
             }
             if (std::isdigit(c) == 0)
             {
                 last_read_char = c;
+                if ((!sign_char_encountered && !digit_encountered) || (sign_char_encountered && !digit_encountered))
+                {
+                    return false;
+                }
                 break;
             }
+            if (!digit_encountered)
+            {
+                digit_encountered = true;
+            }
             string_token += c;
+            last_read_char = c;
         }
     }
     else
@@ -280,6 +311,26 @@ bool Tokenizer::handle_null(std::istream& is, char first_char, std::string& stri
     return true;
 }
 
+bool Tokenizer::handle_whitespace(std::istream& is, char first_char, std::string& string_token, char& last_read_char)
+{
+    string_token += first_char;
+
+    char c;
+    while (is.get(c))
+    {
+        if (c == 0x20 || c == 0x0A || c == 0x0D || c == 0x09)
+        {
+            string_token += c;
+        }
+        else
+        {
+            last_read_char = c;
+            break;
+        }
+    }
+    return true;
+}
+
 std::vector<Token> Tokenizer::tokenize(std::istream& input)
 {
     std::vector<Token> tokens;
@@ -295,6 +346,11 @@ std::vector<Token> Tokenizer::tokenize(std::istream& input)
         if (ignore_input)
         {
             ignore_input = false;
+        }
+        // NUL character
+        if (c == 0x00)
+        {
+            break;
         }
         switch (c)
         {
@@ -334,8 +390,19 @@ std::vector<Token> Tokenizer::tokenize(std::istream& input)
             case 0x0A:  // LINE FEED (\n)
             case 0x0D:  // CARRIAGE RETURN (\r)
             case 0x09:  // HORIZONTAL TAB (\t)
-                tokens.emplace_back(TokenType::whitespace, std::string{c});
+            {
+                std::string string_token{};
+                char last_read_char{};
+                if (!handle_whitespace(input, c, string_token, last_read_char))
+                {
+                    std::cerr << "Error during reading whitespace value\n";
+                    return std::vector<Token>{};
+                }
+                tokens.emplace_back(TokenType::whitespace, string_token);
+                ignore_input = true;
+                c = last_read_char;
                 break;
+            }
             case '-':
             case '0':
             case '1':
@@ -349,7 +416,7 @@ std::vector<Token> Tokenizer::tokenize(std::istream& input)
             case '9':
             {
                 std::string string_token{};
-                char last_read_char;
+                char last_read_char{};
                 if (!handle_numeric(input, c, string_token, last_read_char))
                 {
                     std::cerr << "Error during reading numeric value\n";
@@ -363,7 +430,7 @@ std::vector<Token> Tokenizer::tokenize(std::istream& input)
             case 't':
             case 'f':
             {
-                std::string string_token;
+                std::string string_token{};
                 if (!handle_boolean(input, c, string_token))
                 {
                     std::cerr << "Error during reading boolean value\n";
@@ -374,7 +441,7 @@ std::vector<Token> Tokenizer::tokenize(std::istream& input)
             }
             case 'n':
             {
-                std::string string_token;
+                std::string string_token{};
                 if (!handle_null(input, c, string_token))
                 {
                     std::cerr << "Error during reading null value\n";
