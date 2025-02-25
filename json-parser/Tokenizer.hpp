@@ -42,6 +42,7 @@ class Tokenizer
     [[nodiscard]] bool handle_exponent(std::istream& is, char first_char, std::string& string_token, char& last_read_char);
     [[nodiscard]] bool handle_boolean(std::istream& is, char first_char, std::string& string_token);
     [[nodiscard]] bool handle_null(std::istream& is, char first_char, std::string& string_token);
+    [[nodiscard]] bool handle_whitespace(std::istream& is, char first_char, std::string& string_token, char& last_read_char);
 
 public:
     std::vector<Token> tokenize(std::istream& input);
