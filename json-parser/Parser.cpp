@@ -60,7 +60,6 @@ Parser::Parser()
     RightSideTerminal double_quote = make_right_side_terminal(TokenType::dbl_quote, false);
 
     m_rule_map[LeftSideNonTerminal::json] = {
-        // {LeftSideNonTerminal::element}
         {whitespace, LeftSideNonTerminal::object, whitespace},
         {whitespace, LeftSideNonTerminal::array, whitespace}
     };
@@ -109,7 +108,7 @@ bool Parser::parse_json(const std::vector<Token> &tokens, size_t& token_index, s
     }
 
     // Case when nesting is 20 or more levels deep
-    // Indent level for nesting 19 is 77
+    // Indent level for nesting level 19 is 77
     if (indent_level > 77)
     {
         std::cerr << "Too deeply nested structure found\n";
@@ -119,11 +118,9 @@ bool Parser::parse_json(const std::vector<Token> &tokens, size_t& token_index, s
     unsigned int unmatched_rule_count = 0;
     for (Rule rule : m_rule_map[non_terminal])
     {
-        // size_t no_of_elements_in_rule = rule.size();
         size_t current_element_index = 0;
         bool current_rule_not_matched = false;
         size_t token_index_copy = token_index;
-        // bool no_more_tokens_left = false;
 
         // std::cout << indent_level << ' ';
         // for (size_t i = 0; i < indent_level; i++)
