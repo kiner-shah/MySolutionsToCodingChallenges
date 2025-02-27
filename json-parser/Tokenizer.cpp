@@ -116,17 +116,21 @@ bool Tokenizer::handle_integer(std::istream& is, char first_char, std::string& s
     if (first_char == '-')
     {
         string_token += first_char;
+        bool is_first_char_after_sign = true;
         while (is.get(c))
         {
             if (c == '0')
             {
                 string_token += c;
-                if (!(is.get(c)))
+                if (is_first_char_after_sign)
                 {
-                    return false;
+                    if (!(is.get(c)))
+                    {
+                        return false;
+                    }
+                    last_read_char = c;
+                    break;
                 }
-                last_read_char = c;
-                break;
             }
             else if (std::isdigit(c) == 0)
             {
@@ -134,6 +138,7 @@ bool Tokenizer::handle_integer(std::istream& is, char first_char, std::string& s
                 break;
             }
             string_token += c;
+            is_first_char_after_sign = false;
         }
     }
     else if (first_char >= '1' && first_char <= '9')

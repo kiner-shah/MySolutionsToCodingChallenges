@@ -114,6 +114,7 @@ bool Parser::parse_json(const std::vector<Token> &tokens, size_t& token_index, s
         std::cerr << "Too deeply nested structure found\n";
         return false;
     }
+    // std::cout << "Indent level: " << indent_level << '\n';
 
     unsigned int unmatched_rule_count = 0;
     for (Rule rule : m_rule_map[non_terminal])
@@ -184,7 +185,7 @@ bool Parser::parse_json(const std::vector<Token> &tokens, size_t& token_index, s
     }
     if (unmatched_rule_count == m_rule_map[non_terminal].size())
     {
-        // std::cerr << "Failed to parse for " << left_side_non_terminal_to_string(non_terminal) << '\n';
+        // std::cerr << "Failed to parse for " << left_side_non_terminal_to_string(non_terminal) << " Token index: " << token_index << '\n';
         return false;
     }
     // std::cout << "Success parsing " << left_side_non_terminal_to_string(non_terminal) << ' ' << token_index << '\n';
@@ -202,6 +203,7 @@ bool Parser::parse(const std::vector<Token> &tokens)
     // Case when there are extra tokens after the actual JSON structure
     if (result && start_token_index < tokens.size())
     {
+        // std::cerr << "Failed as there are extra tokens\n";
         return false;
     }
     return result;
