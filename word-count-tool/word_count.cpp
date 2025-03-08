@@ -4,6 +4,8 @@
 #include <cstring>
 #include <cstdlib>
 #include <iomanip>
+#include <array>
+#include <cwctype>
 
 namespace
 {
@@ -37,9 +39,9 @@ bool process_file(std::istream &is, Output &output)
 {
     // const size_t buffer_size = MB_CUR_MAX;   // Keep this commented, not sure where this MB_CUR_MAX can be used
     constexpr size_t BUF_SIZE = 1024;
-    std::array<char, BUF_SIZE> file_buf;
-    int remaining_bytes = 0;
-    wchar_t current_wide_char, previous_wide_char;
+    std::array<char, BUF_SIZE> file_buf{};
+    size_t remaining_bytes = 0;
+    wchar_t current_wide_char, previous_wide_char = L'\0';
     bool first_char = false, is_word_under_process = false;
  
     // Sometimes std::istream::read fails after certain offset, so check also if
@@ -50,7 +52,7 @@ bool process_file(std::istream &is, Output &output)
         // Remember to add remaining bytes to read bytes, else you will see incorrect results
         size_t bytes_read = is.gcount() + remaining_bytes;
         char* file_buf_data_ptr = file_buf.data();
-        int processed_offset = 0;
+        size_t processed_offset = 0;
         remaining_bytes = 0;
 
         while (bytes_read > 0)
@@ -111,7 +113,7 @@ bool process_file(std::istream &is, Output &output)
                 //     file_buf[file_buf_index - processed_offset] = file_buf[file_buf_index];
                 // }
                 std::copy(file_buf.begin() + processed_offset, file_buf.end(), file_buf.begin());
-                std::fill(file_buf.begin() + file_buf.size() - processed_offset, file_buf.end(), 0);
+                std::fill(file_buf.begin() + file_buf.size() - processed_offset, file_buf.end(), '\0');
                 break;
             }
         }
@@ -164,7 +166,12 @@ void print_usage(const char* program_name)
 }   // namespace
 int main(int argc, char **argv)
 {
-    std::setlocale(LC_ALL, "");
+    // If the current locale does not support multibyte characters output of -m will match that of -c option
+#if defined(_WIN32)
+    std::cout << "Current locale is: " << std::setlocale(LC_ALL, ".utf8") << '\n';
+#elif defined(__unix__)
+    std::cout << "Current locale is: " << std::setlocale(LC_ALL, "") << '\n';
+#endif
 
     Config config;
 
