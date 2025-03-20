@@ -72,6 +72,7 @@ std::string read_file(const Config& config)
         if (!input.read(file_contents.data(), file_size))
         {
             std::cerr << "Failure while reading file " << config.m_input_file_path << '\n';
+            input.close();
             return std::string{};
         }
         input.close();
