@@ -4,6 +4,7 @@
 #include <vector>
 #include <bitset>
 #include "HuffmanTree.hpp"
+#include "CompressionHeader.hpp"
 #include "utils.hpp"
 
 namespace
@@ -27,107 +28,13 @@ std::ostream& operator<<(std::ostream& os, const Config& config)
 // Fills the map with counts of each UTF-32 codepoint and returns the converted sequence of UTF-32 codepoints.
 std::vector<char32_t> process_file_and_compute_frequency(const std::string& file_contents, std::unordered_map<char32_t, std::uint64_t>& char32_frequency_map)
 {
-    // Reference: https://writings.sh/post/en/utf8
-
     char32_t utf32_codepoint;
     unsigned int state = 0;
     std::vector<char32_t> codepoints;
 
     for (unsigned char c : file_contents)
     {
-        // Decoding UTF-8 bytes into UTF-32 codepoints
-        switch (state)
-        {
-            case 0:
-                if (c >= 0x0 && c <= 0x7f)
-                {
-                    utf32_codepoint = c;
-                }
-                else if (c >= 0xc2 && c <= 0xdf)
-                {
-                    state = 1;
-                    utf32_codepoint = c & 0x1f;
-                }
-                else if (c == 0xe0)
-                {
-                    state = 4;
-                    utf32_codepoint = c & 0xf;
-                }
-                else if (c >= 0xe1 && c <= 0xef)
-                {
-                    state = 2;
-                    utf32_codepoint = c & 0xf;
-                }
-                else if (c == 0xf0)
-                {
-                    state = 5;
-                    utf32_codepoint = c & 0x7;
-                }
-                else if (c >= 0xf1 && c <= 0xf3)
-                {
-                    state = 3;
-                    utf32_codepoint = c & 0x7;
-                }
-                else if (c == 0xf4)
-                {
-                    state = 6;
-                    utf32_codepoint = c & 0x7;
-                }
-                else
-                {
-                    state = 8;
-                }
-                break;
-            case 1:
-            case 2:
-            case 3:
-                if (c >= 0x80 && c <= 0xbf)
-                {
-                    state--;
-                    utf32_codepoint = (utf32_codepoint << 6) | (c & 0x3f);
-                }
-                else
-                {
-                    state = 8;
-                }
-                break;
-            case 4:
-                if (c >= 0xa0 && c <= 0xbf)
-                {
-                    state = 1;
-                    utf32_codepoint = (utf32_codepoint << 6) | (c & 0x3f);
-                }
-                else
-                {
-                    state = 8;
-                }
-                break;
-            case 5:
-                if (c >= 0x90 && c <= 0xbf)
-                {
-                    state = 2;
-                    utf32_codepoint = (utf32_codepoint << 6) | (c & 0x3f);
-                }
-                else
-                {
-                    state = 8;
-                }
-                break;
-            case 6:
-                if (c >= 0x80 && c <= 0x8f)
-                {
-                    state = 2;
-                    utf32_codepoint = (utf32_codepoint << 6) | (c & 0x3f);
-                }
-                else
-                {
-                    state = 8;
-                }
-                break;
-            default:
-                state = 8;
-                break;
-        }
+        state = kcompress::decode_utf8_char_to_utf32(c, state, utf32_codepoint);
 
         if (state == 8)
         {
@@ -185,7 +92,7 @@ int main(int argc, char** argv)
     // Read a file
     std::size_t file_size = std::filesystem::file_size(config.input_file_path);
     std::string buffer(file_size, '\0');
-    std::ifstream input_file(config.input_file_path);
+    std::ifstream input_file(config.input_file_path, std::ios::binary);
     if (!input_file.good())
     {
         std::cerr << "Cannot open input file " << config.input_file_path << '\n';
@@ -194,8 +101,18 @@ int main(int argc, char** argv)
     if (!input_file.read(buffer.data(), file_size))
     {
         std::cerr << "Failure during reading input file " << config.input_file_path << '\n';
+        input_file.close();
         return 1;
     }
+    input_file.close();
+
+    std::ofstream output(config.output_file_path, std::ios::binary);
+    if (!output.good())
+    {
+        std::cerr << "Cannot open output file " << config.output_file_path << '\n';
+        return 1;
+    }
+
     if (!config.should_decode)
     {
         // Encoding
@@ -215,12 +132,73 @@ int main(int argc, char** argv)
         kcompress::HuffmanTree huffman_tree{char32_frequency_map};
         char32_frequency_map.clear();
         // huffman_tree.print_tree();
-        auto bit_map = huffman_tree.get_bit_map();
 
+        // Serialize data
+        auto bit_map = huffman_tree.get_bit_map();
+        unsigned char byte;
+        unsigned char remaining_bits = 8;
+        std::uint64_t total_bits = 0;
+        std::vector<unsigned char> output_buffer;
+        for (auto codepoint : codepoint_sequence)
+        {
+            std::string code = bit_map[codepoint];
+            for (unsigned char c : code)
+            {
+                if (c == '0')
+                {
+                    byte <<= 1;
+                }
+                else if (c == '1')
+                {
+                    byte = (byte << 1) | 1;
+                }
+                total_bits++;
+                remaining_bits--;
+                if (remaining_bits == 0)
+                {
+                    remaining_bits = 8;
+                    output_buffer.push_back(byte);
+                    byte = 0;
+                }
+            }
+        }
+        if (remaining_bits != 0 && remaining_bits != 8)
+        {
+            output_buffer.push_back(byte << remaining_bits);
+        }
+
+        // Serialize tree
+        kcompress::CompressionHeader header;
+        header.m_original_file_bytes = file_size;
+        header.m_serialized_tree = huffman_tree.serialize(header.m_serialized_tree_total_bits);
+        header.m_payload_length_bits = total_bits;
+        header.m_header_length = 24u + header.m_serialized_tree.size();
+        // std::cout << "Header length: " << std::hex << header.m_header_length << std::dec << '\n';
+        // std::cout << "Original file bytes: " << std::hex << header.m_original_file_bytes << std::dec << '\n';
+        // std::cout << "Total bits in serialized tree: " << std::hex << header.m_serialized_tree_total_bits << std::dec << '\n';
+        // std::cout << "Payload bytes: " << output_buffer.size() << '\n';
+        // std::cout << "Payload bits: " << std::hex << header.m_payload_length_bits << std::dec << '\n';
+        // for (unsigned char c : header.m_serialized_tree)
+        // {
+        //     std::bitset<8> b(c);
+        //     std::cout << b << ' ';
+        // }
+
+        output << header;
+        for (auto output_buffer_byte : output_buffer)
+        {
+            output << output_buffer_byte;
+        }
+        output.close();
     }
     else
     {
         // Decoding
 
+        // Read header
+        //  If 1, create a tree leaf. Then read a byte, check if state is 0
+        //    If state is 0, then set converted codepoint to tree leaf
+        //    Else continue reading bytes
+        //  Else if 0, create a non-leaf. For left and right, recursively continue for both.
     }
 }

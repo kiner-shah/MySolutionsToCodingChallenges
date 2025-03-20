@@ -3,6 +3,8 @@
 #include <deque>
 #include <cstdint>
 #include <optional>
+#include <string>
+#include <vector>
 #include <unordered_map>
 
 namespace kcompress
@@ -23,19 +25,25 @@ struct HuffmanTreeNode
 
 class HuffmanTree
 {
-    using BitMapType = std::unordered_map<char32_t, std::uint32_t>;
+    using BitMapType = std::unordered_map<char32_t, std::string>;
 
     HuffmanTreeNode* m_root;
+    std::uint32_t m_tree_height;
+    BitMapType m_bit_map;
 
     void build_tree(std::deque<HuffmanTreeNode*>& nodes);
     void destroy_tree(HuffmanTreeNode* root);
-    void construct_bit_map(HuffmanTreeNode* root, std::uint32_t value, BitMapType& bit_map);
+    void construct_bit_map(HuffmanTreeNode* root, std::string value);
     std::uint32_t get_tree_height(HuffmanTreeNode* root) const;
 public:
+    HuffmanTree();
     HuffmanTree(const std::unordered_map<char32_t, std::uint64_t>& char32_frequency_map);
     ~HuffmanTree();
 
-    BitMapType get_bit_map();
+    BitMapType get_bit_map() const;
+    std::uint32_t get_tree_height() const;
     void print_tree();
+
+    std::vector<unsigned char> serialize(std::uint64_t& total_bits);
 };
 }   // namespace kcompress
