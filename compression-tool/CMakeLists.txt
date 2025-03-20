@@ -3,7 +3,7 @@ project(CompressionTool CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 
-add_executable(KCompressor main.cpp HuffmanTree.cpp utils.cpp)
+add_executable(KCompressor main.cpp HuffmanTree.cpp utils.cpp CompressionHeader.cpp)
 
 if (WIN32 OR MSVC)
     # Need to copy clang_rt.asan_dbg_dynamic-x86_64.dll from

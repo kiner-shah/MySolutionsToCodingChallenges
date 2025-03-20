@@ -3,6 +3,7 @@
 #include <cassert>
 #include <iostream>
 #include <stack>
+#include <bitset>
 #include "utils.hpp"
 
 namespace kcompress
@@ -56,7 +57,7 @@ void HuffmanTree::destroy_tree(HuffmanTreeNode *root)
     root = nullptr;
 }
 
-void HuffmanTree::construct_bit_map(HuffmanTreeNode *root, std::uint32_t value, BitMapType &bit_map)
+void HuffmanTree::construct_bit_map(HuffmanTreeNode *root, std::string value)
 {
     if (root == nullptr)
     {
@@ -64,16 +65,17 @@ void HuffmanTree::construct_bit_map(HuffmanTreeNode *root, std::uint32_t value, 
     }
     if (root->is_leaf_node())
     {
-        bit_map.emplace(root->m_utf32_codepoint.value(), value);
+        // std::cout << root->m_utf32_codepoint.value() << ' ' << value << '\n';
+        m_bit_map.emplace(root->m_utf32_codepoint.value(), value);
         return;
     }
     if (root->m_left)
     {
-        construct_bit_map(root->m_left, (value << 1), bit_map);
+        construct_bit_map(root->m_left, value + '0');
     }
     if (root->m_right)
     {
-        construct_bit_map(root->m_right, (value << 1) | 1, bit_map);
+        construct_bit_map(root->m_right, value + '1');
     }
 }
 
@@ -88,6 +90,11 @@ std::uint32_t HuffmanTree::get_tree_height(HuffmanTreeNode* root) const
     return 1 + std::max(left_height, right_height);
 }
 
+HuffmanTree::HuffmanTree()
+    : m_root{nullptr}, m_tree_height{0}
+{
+}
+
 HuffmanTree::HuffmanTree(const std::unordered_map<char32_t, std::uint64_t> &char32_frequency_map)
 {
     std::deque<HuffmanTreeNode*> nodes;
@@ -99,23 +106,38 @@ HuffmanTree::HuffmanTree(const std::unordered_map<char32_t, std::uint64_t> &char
     build_tree(nodes);
     assert(nodes.size() == 1);
     m_root = nodes[0];
+
+    m_tree_height = get_tree_height(m_root);
+
+    std::string value{};
+    value.reserve(m_tree_height);
+    construct_bit_map(m_root, std::move(value));
 }
 
 HuffmanTree::~HuffmanTree()
 {
     destroy_tree(m_root);
+    m_tree_height = 0;
+    m_bit_map.clear();
 }
 
-HuffmanTree::BitMapType HuffmanTree::get_bit_map()
+HuffmanTree::BitMapType HuffmanTree::get_bit_map() const
 {
-    HuffmanTree::BitMapType bit_map;
-    construct_bit_map(m_root, 0, bit_map);
-    return bit_map;
+    return m_bit_map;
+}
+
+std::uint32_t HuffmanTree::get_tree_height() const
+{
+    return m_tree_height;
 }
 
 void HuffmanTree::print_tree()
 {
-    std::cout << "Tree height: " << get_tree_height(m_root) << '\n';
+    if (!m_root)
+    {
+        return;
+    }
+    std::cout << "Tree height: " << m_tree_height << '\n';
     std::stack<HuffmanTreeNode*> s;
     s.push(m_root);
     while (!s.empty())
@@ -144,5 +166,91 @@ void HuffmanTree::print_tree()
         }
     }
     std::cout << '\n';
+}
+std::vector<unsigned char> HuffmanTree::serialize(std::uint64_t& total_bits)
+{
+    std::vector<unsigned char> buffer;
+    if (!m_root)
+    {
+        return buffer;
+    }
+
+    unsigned char current_byte = 0;
+    unsigned char remaining_bits = 8;
+    unsigned char current_byte_processed_bits = 0;
+
+    std::stack<HuffmanTreeNode*> s;
+    s.push(m_root);
+    while (!s.empty())
+    {
+        auto node = s.top();
+        s.pop();
+
+        current_byte <<= 1;
+        if (node->is_leaf_node())
+        {
+            current_byte |= 1;
+        }
+
+        total_bits++;
+        remaining_bits--;
+        if (remaining_bits == 0)
+        {
+            buffer.push_back(current_byte);
+            current_byte = 0;
+            remaining_bits = 8;
+        }
+
+        if (node->is_leaf_node())
+        {
+            std::array<unsigned char, 4> bytes;
+            auto no_of_bytes = kcompress::convert_utf32_to_utf8_char(node->m_utf32_codepoint.value(), bytes);
+
+            for (unsigned int index = 0; index < no_of_bytes; )
+            {
+                if (remaining_bits < 8)
+                {
+                    current_byte = (current_byte << remaining_bits) | (bytes[index] >> (8 - remaining_bits));
+                    current_byte_processed_bits = remaining_bits;
+                    buffer.push_back(current_byte);
+
+                    total_bits += remaining_bits;
+                    remaining_bits = 8;
+                    current_byte = 0;
+                }
+                else
+                {
+                    current_byte = ((bytes[index] << current_byte_processed_bits) & 0xff) >> current_byte_processed_bits;
+                    remaining_bits = current_byte_processed_bits;
+                    total_bits += (8 - current_byte_processed_bits);
+                    if (remaining_bits == 0)
+                    {
+                        buffer.push_back(current_byte);
+                        current_byte = 0;
+                        remaining_bits = 8;
+                    }
+                    index++;
+                    current_byte_processed_bits = 0;
+                }
+            }
+        }
+        else
+        {
+            if (node->m_right)
+            {
+                s.push(node->m_right);
+            }
+            if (node->m_left)
+            {
+                s.push(node->m_left);
+            }
+        }
+    }
+    if (current_byte != 0)
+    {
+        current_byte <<= remaining_bits;
+        buffer.push_back(current_byte);
+    }
+    return buffer;
 }
 } // namespace kcompress
