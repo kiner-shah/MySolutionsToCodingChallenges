@@ -63,7 +63,7 @@ std::string read_file(const Config& config)
     {
         std::size_t file_size = std::filesystem::file_size(config.m_input_file_path);
         file_contents.resize(file_size);
-        std::ifstream input(config.m_input_file_path);
+        std::ifstream input(config.m_input_file_path, std::ios::binary);
         if (!input.good())
         {
             std::cerr << "Couldn't open file for reading: " << config.m_input_file_path << '\n';
@@ -74,6 +74,7 @@ std::string read_file(const Config& config)
             std::cerr << "Failure while reading file " << config.m_input_file_path << '\n';
             return std::string{};
         }
+        input.close();
     }
     return file_contents;
 }
