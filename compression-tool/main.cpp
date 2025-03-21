@@ -1,5 +1,6 @@
 #include <iostream>
 #include <fstream>
+#include <sstream>
 #include <filesystem>
 #include <vector>
 #include <bitset>
@@ -66,8 +67,7 @@ int main(int argc, char** argv)
         print_usage(argv[0]);
         return 1;
     }
- 
-    std::cout << "Setting locale to " << std::setlocale(LC_ALL, "") << '\n';
+
     Config config;
     for (int i = 1; i < argc;)
     {
@@ -106,8 +106,8 @@ int main(int argc, char** argv)
     }
     input_file.close();
 
-    std::ofstream output(config.output_file_path, std::ios::binary);
-    if (!output.good())
+    std::ofstream output_file(config.output_file_path, std::ios::binary);
+    if (!output_file.good())
     {
         std::cerr << "Cannot open output file " << config.output_file_path << '\n';
         return 1;
@@ -135,6 +135,10 @@ int main(int argc, char** argv)
 
         // Serialize data
         auto bit_map = huffman_tree.get_bit_map();
+        // for (const auto& [codepoint, value] : bit_map)
+        // {
+        //     std::cout << codepoint << ' ' << value << '\n';
+        // }
         unsigned char byte;
         unsigned char remaining_bits = 8;
         std::uint64_t total_bits = 0;
@@ -184,21 +188,50 @@ int main(int argc, char** argv)
         //     std::cout << b << ' ';
         // }
 
-        output << header;
+        output_file << header;
         for (auto output_buffer_byte : output_buffer)
         {
-            output << output_buffer_byte;
+            output_file << output_buffer_byte;
         }
-        output.close();
+        output_file.close();
     }
     else
     {
         // Decoding
+        std::istringstream ss{buffer};
 
-        // Read header
-        //  If 1, create a tree leaf. Then read a byte, check if state is 0
-        //    If state is 0, then set converted codepoint to tree leaf
-        //    Else continue reading bytes
-        //  Else if 0, create a non-leaf. For left and right, recursively continue for both.
+        kcompress::CompressionHeader header;
+        ss >> header;
+
+        auto serialized_payload_bytes_div_result = std::div(header.m_payload_length_bits, 8);
+        if (serialized_payload_bytes_div_result.rem != 0)
+        {
+            serialized_payload_bytes_div_result.quot++;
+        }
+
+        std::vector<unsigned char> payload_buffer;
+        payload_buffer.resize(serialized_payload_bytes_div_result.quot);
+        ss.read(reinterpret_cast<char*>(payload_buffer.data()), serialized_payload_bytes_div_result.quot);
+
+        kcompress::HuffmanTree huffman_tree;
+        huffman_tree.deserialize(header.m_serialized_tree, header.m_serialized_tree_total_bits);
+
+        auto bit_map = huffman_tree.get_bit_map();
+        // for (const auto& [codepoint, value] : bit_map)
+        // {
+        //     std::cout << codepoint << ' ' << value << '\n';
+        // }
+
+        auto codepoints = huffman_tree.deserialize_payload(payload_buffer, header.m_payload_length_bits);
+        for (const auto& codepoint : codepoints)
+        {
+            std::array<unsigned char, 4> bytes;
+            auto converted_bytes_length = kcompress::convert_utf32_to_utf8_char(codepoint, bytes);
+            for (unsigned int bytes_index = 0; bytes_index < converted_bytes_length; bytes_index++)
+            {
+                output_file << bytes[bytes_index];
+            }
+        }
+        output_file.close();
     }
 }

@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <ostream>
+#include <istream>
 #include <vector>
 
 namespace kcompress
@@ -15,5 +16,6 @@ struct CompressionHeader
     std::vector<unsigned char> m_serialized_tree;
 
     friend std::ostream& operator<<(std::ostream& os, const CompressionHeader& header);
+    friend std::istream& operator>>(std::istream& is, CompressionHeader& header);
 };
 }   // namespace kcompress
