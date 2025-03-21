@@ -172,7 +172,11 @@ int main(int argc, char** argv)
         std::istringstream ss{buffer};
 
         kcompress::CompressionHeader header;
-        ss >> header;
+        if (!(ss >> header))
+        {
+            std::cerr << "Failure while reading compressed file header\n";
+            return 1;
+        }
 
         auto serialized_payload_bytes_div_result = std::div(header.m_payload_length_bits, 8);
         if (serialized_payload_bytes_div_result.rem != 0)
@@ -182,7 +186,11 @@ int main(int argc, char** argv)
 
         std::vector<unsigned char> payload_buffer;
         payload_buffer.resize(serialized_payload_bytes_div_result.quot);
-        ss.read(reinterpret_cast<char*>(payload_buffer.data()), serialized_payload_bytes_div_result.quot);
+        if (!ss.read(reinterpret_cast<char*>(payload_buffer.data()), serialized_payload_bytes_div_result.quot))
+        {
+            std::cerr << "Failure while reading compressed file payload\n";
+            return 1;
+        }
 
         kcompress::HuffmanTree huffman_tree;
         huffman_tree.deserialize(header.m_serialized_tree, header.m_serialized_tree_total_bits);

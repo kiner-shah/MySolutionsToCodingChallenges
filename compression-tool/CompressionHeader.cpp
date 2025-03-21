@@ -4,7 +4,6 @@ namespace kcompress
 {
 std::ostream& operator<<(std::ostream &os, const CompressionHeader &header)
 {
-    // TODO: do error checking here
     os.write(reinterpret_cast<const char*>(&header.m_header_length), sizeof(header.m_header_length));
     os.write(reinterpret_cast<const char*>(&header.m_payload_length_bits), sizeof(header.m_payload_length_bits));
     os.write(reinterpret_cast<const char*>(&header.m_serialized_tree_total_bits), sizeof(header.m_serialized_tree_total_bits));
@@ -18,7 +17,6 @@ std::ostream& operator<<(std::ostream &os, const CompressionHeader &header)
 
 std::istream& operator>>(std::istream &is, CompressionHeader &header)
 {
-    // TODO: do error checking here
     is.read(reinterpret_cast<char*>(&header.m_header_length), sizeof(header.m_header_length));
     is.read(reinterpret_cast<char*>(&header.m_payload_length_bits), sizeof(header.m_payload_length_bits));
     is.read(reinterpret_cast<char*>(&header.m_serialized_tree_total_bits), sizeof(header.m_serialized_tree_total_bits));
