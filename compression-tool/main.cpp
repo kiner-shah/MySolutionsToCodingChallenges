@@ -139,37 +139,8 @@ int main(int argc, char** argv)
         // {
         //     std::cout << codepoint << ' ' << value << '\n';
         // }
-        unsigned char byte;
-        unsigned char remaining_bits = 8;
         std::uint64_t total_bits = 0;
-        std::vector<unsigned char> output_buffer;
-        for (auto codepoint : codepoint_sequence)
-        {
-            std::string code = bit_map[codepoint];
-            for (unsigned char c : code)
-            {
-                if (c == '0')
-                {
-                    byte <<= 1;
-                }
-                else if (c == '1')
-                {
-                    byte = (byte << 1) | 1;
-                }
-                total_bits++;
-                remaining_bits--;
-                if (remaining_bits == 0)
-                {
-                    remaining_bits = 8;
-                    output_buffer.push_back(byte);
-                    byte = 0;
-                }
-            }
-        }
-        if (remaining_bits != 0 && remaining_bits != 8)
-        {
-            output_buffer.push_back(byte << remaining_bits);
-        }
+        auto output_buffer = huffman_tree.serialize_payload(codepoint_sequence, total_bits);
 
         // Serialize tree
         kcompress::CompressionHeader header;

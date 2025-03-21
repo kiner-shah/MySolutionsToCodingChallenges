@@ -47,6 +47,7 @@ public:
     void print_tree();
 
     std::vector<unsigned char> serialize(std::uint64_t& total_bits);
+    std::vector<unsigned char> serialize_payload(const std::vector<char32_t>& codepoint_sequence, std::uint64_t& total_bits);
     void deserialize(const std::vector<unsigned char>& serialized_tree, std::uint64_t serialized_tree_bits);
     std::vector<char32_t> deserialize_payload(const std::vector<unsigned char>& serialized_payload, std::uint64_t serialized_payload_bits);
 };
