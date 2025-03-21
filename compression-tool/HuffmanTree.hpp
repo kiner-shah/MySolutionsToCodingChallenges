@@ -35,6 +35,8 @@ class HuffmanTree
     void destroy_tree(HuffmanTreeNode* root);
     void construct_bit_map(HuffmanTreeNode* root, std::string value);
     std::uint32_t get_tree_height(HuffmanTreeNode* root) const;
+    HuffmanTreeNode* deserialize(const std::vector<unsigned char>& serialized_tree, std::uint64_t serialized_tree_bits,
+                    std::size_t& index, std::uint64_t& total_processed_bits, unsigned char& remaining_bits, HuffmanTreeNode* root);
 public:
     HuffmanTree();
     HuffmanTree(const std::unordered_map<char32_t, std::uint64_t>& char32_frequency_map);
@@ -45,5 +47,7 @@ public:
     void print_tree();
 
     std::vector<unsigned char> serialize(std::uint64_t& total_bits);
+    void deserialize(const std::vector<unsigned char>& serialized_tree, std::uint64_t serialized_tree_bits);
+    std::vector<char32_t> deserialize_payload(const std::vector<unsigned char>& serialized_payload, std::uint64_t serialized_payload_bits);
 };
 }   // namespace kcompress

@@ -167,6 +167,7 @@ void HuffmanTree::print_tree()
     }
     std::cout << '\n';
 }
+
 std::vector<unsigned char> HuffmanTree::serialize(std::uint64_t& total_bits)
 {
     std::vector<unsigned char> buffer;
@@ -252,5 +253,165 @@ std::vector<unsigned char> HuffmanTree::serialize(std::uint64_t& total_bits)
         buffer.push_back(current_byte);
     }
     return buffer;
+}
+
+HuffmanTreeNode* HuffmanTree::deserialize(const std::vector<unsigned char> &serialized_tree, std::uint64_t serialized_tree_bits,
+                            std::size_t& index, std::uint64_t &total_processed_bits, unsigned char &remaining_bits,
+                            HuffmanTreeNode* root)
+{
+    if (index >= serialized_tree.size())
+    {
+        return nullptr;
+    }
+
+    if (total_processed_bits >= serialized_tree_bits)
+    {
+        return nullptr;
+    }
+
+    int bit = (serialized_tree[index] >> (remaining_bits - 1)) & 0x1;
+
+    remaining_bits--;
+    total_processed_bits++;
+    if (remaining_bits == 0)
+    {
+        remaining_bits = 8;
+        index++;
+    }
+
+    if (root == nullptr)
+    {
+        root = new HuffmanTreeNode();
+    }
+
+    if (bit == 0)
+    {
+        // If 0, create a non-leaf. For left and right, recursively continue for both.
+
+        root->m_left = deserialize(serialized_tree, serialized_tree_bits, index, total_processed_bits, remaining_bits, root->m_left);
+        root->m_right = deserialize(serialized_tree, serialized_tree_bits, index, total_processed_bits, remaining_bits, root->m_right);
+    }
+    else if (bit == 1)
+    {
+        //  If 1, create a tree leaf. Then read a byte, check if state is 0
+        //    If state is 0, then set converted codepoint to tree leaf
+        //    Else continue reading bytes
+
+        unsigned int state = 0;
+        char32_t codepoint;
+        do
+        {
+            // Get 8-bits a byte of multi-byte character
+            unsigned char byte = 0;
+            if (remaining_bits < 8)
+            {
+                if (index + 1 >= serialized_tree.size())
+                {
+                    state = 8;
+                    break;
+                }
+
+                unsigned char processed_bits = 8 - remaining_bits;
+                // std::bitset<8> b1(serialized_tree[index]);
+                // std::bitset<8> b((serialized_tree[index] << processed_bits) & 0xff);
+                // std::bitset<8> b2(serialized_tree[index + 1] >> remaining_bits);
+                // std::bitset<8> b3(serialized_tree[index + 1]);
+                // std::cout << static_cast<int>(processed_bits) << ' ' << static_cast<int>(remaining_bits) << '\n';
+                // std::cout << b1 << " | " << b << ' ' << b2 << " | " << b3 << '\n';
+                byte = ((serialized_tree[index] << processed_bits) & 0xff) | (serialized_tree[index + 1] >> remaining_bits);
+            }
+            else
+            {
+                std::bitset<8> b(serialized_tree[index]);
+                // std::cout << b << '\n';
+                byte = serialized_tree[index];
+            }
+            index++;
+            total_processed_bits += 8;
+            // Note that in next byte, the remaining_bits will be the same
+
+            state = kcompress::decode_utf8_char_to_utf32(byte, state, codepoint);
+            // std::cout << state << '\n';
+        } while (state != 0 && state != 8 && index < serialized_tree.size());
+
+        if (state == 8)
+        {
+            std::cerr << "Failure during decoding serialized tree\n";
+            exit(1);
+        }
+
+        root->m_utf32_codepoint = codepoint;
+    }
+    return root;
+}
+
+void HuffmanTree::deserialize(const std::vector<unsigned char> &serialized_tree, std::uint64_t serialized_tree_bits)
+{
+    std::uint64_t total_processed_bits = 0;
+    unsigned char remaining_bits = 8;
+    std::size_t index = 0;
+
+    if (m_root)
+    {
+        destroy_tree(m_root);
+    }
+
+    m_root = deserialize(serialized_tree, serialized_tree_bits, index, total_processed_bits, remaining_bits, m_root);
+
+    m_tree_height = get_tree_height(m_root);
+
+    std::string value{};
+    value.reserve(m_tree_height);
+    construct_bit_map(m_root, std::move(value));
+}
+
+std::vector<char32_t> HuffmanTree::deserialize_payload(const std::vector<unsigned char> &serialized_payload, std::uint64_t serialized_payload_bits)
+{
+    std::vector<char32_t> output_codepoints;
+
+    HuffmanTreeNode* root = m_root;
+
+    unsigned char remaining_bits = 8;
+    std::uint64_t total_processed_bits = 0;
+    for (std::size_t index = 0; index < serialized_payload.size(); )
+    {
+        int bit = (serialized_payload[index] >> (remaining_bits - 1)) & 0x1;
+
+        if (bit == 0)
+        {
+            if (!root->m_left)
+            {
+                return std::vector<char32_t>{};
+            }
+            root = root->m_left;
+        }
+        else if (bit == 1)
+        {
+            if (!root->m_right)
+            {
+                return std::vector<char32_t>{};
+            }
+            root = root->m_right;
+        }
+        if (root->is_leaf_node())
+        {
+            output_codepoints.push_back(root->m_utf32_codepoint.value());
+            root = m_root;
+        }
+
+        remaining_bits--;
+        total_processed_bits++;
+        if (total_processed_bits >= serialized_payload_bits)
+        {
+            break;
+        }
+        if (remaining_bits == 0)
+        {
+            remaining_bits = 8;
+            index++;
+        }
+    }
+
+    return output_codepoints;
 }
 } // namespace kcompress
