@@ -397,6 +397,7 @@ void HuffmanTree::deserialize(const std::vector<unsigned char> &serialized_tree,
 
     std::string value{};
     value.reserve(m_tree_height);
+    m_bit_map.clear();
     construct_bit_map(m_root, std::move(value));
 }
 
