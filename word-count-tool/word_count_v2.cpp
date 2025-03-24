@@ -1,6 +1,7 @@
 #include <iostream>
 #include <fstream>
 #include <filesystem>
+#include <algorithm>
 
 namespace
 {
@@ -110,14 +111,7 @@ bool is_white_space(char32_t c)
         8287,
         12288
     };
-    for (std::size_t index = 0; index < possible_whites_spaces.size(); index++)
-    {
-        if (possible_whites_spaces[index] == c)
-        {
-            return true;
-        }
-    }
-    return false;
+    return std::find(possible_whites_spaces.begin(), possible_whites_spaces.end(), c) != possible_whites_spaces.end();
     // return c == U' ' || c == U'\n' || c == U'\t' || c == U'\r' || c == U'\v' || c == U'\f';
 }
 
