@@ -82,7 +82,43 @@ std::string read_file(const Config& config)
 
 bool is_white_space(char32_t c)
 {
-    return c == U' ' || c == U'\n' || c == U'\t' || c == U'\r' || c == U'\v' || c == U'\f';
+    // Reference: https://en.wikipedia.org/wiki/Unicode_character_property#Whitespace
+    std::array<char32_t, 25> possible_whites_spaces = {
+        9,
+        10,
+        11,
+        12,
+        13,
+        32,
+        133,
+        160,
+        5760,
+        8192,
+        8193,
+        8194,
+        8195,
+        8196,
+        8197,
+        8198,
+        8199,
+        8200,
+        8201,
+        8202,
+        8232,
+        8233,
+        8239,
+        8287,
+        12288
+    };
+    for (std::size_t index = 0; index < possible_whites_spaces.size(); index++)
+    {
+        if (possible_whites_spaces[index] == c)
+        {
+            return true;
+        }
+    }
+    return false;
+    // return c == U' ' || c == U'\n' || c == U'\t' || c == U'\r' || c == U'\v' || c == U'\f';
 }
 
 bool process_file(const std::string& file_contents, Output& output)
@@ -91,12 +127,19 @@ bool process_file(const std::string& file_contents, Output& output)
 
     char32_t utf32_codepoint;
     unsigned int state = 0;
-    unsigned int char_bytes = 0;
     bool is_word_under_process = false;
 
     for (unsigned char c : file_contents)
     {
-        char_bytes++;
+        // Process bytes
+        output.m_bytes++;
+
+        // Process lines
+        if (c == '\n')
+        {
+            output.m_lines++;
+        }
+
         // Decoding UTF-8 bytes into UTF-32 codepoints
         switch (state)
         {
@@ -193,20 +236,21 @@ bool process_file(const std::string& file_contents, Output& output)
 
         if (state == 8)
         {
-            std::cerr << "Failure: bad encoding\n";
-            return false;
+            // Improvement:
+            // In case there is an encoding error, just skip it instead of returning an error.
+            // Byte count and line count was affected, but char and word count wasn't.
+            // Next state needs to be set to 0.
+
+            //std::cerr << "Failure: bad encoding\n";
+            //return false;
+            state = 0;
+            continue;
         }
         else if (state == 0)
         {
-            // Process bytes and chars
-            output.m_bytes += char_bytes;
+            // Process chars
             output.m_chars++;
 
-            // Process lines
-            if (utf32_codepoint == U'\n')
-            {
-                output.m_lines++;
-            }
             // Process words
             if (is_white_space(utf32_codepoint) && is_word_under_process)
             {
@@ -217,7 +261,6 @@ bool process_file(const std::string& file_contents, Output& output)
             {
                 is_word_under_process = true;
             }
-            char_bytes = 0;
         }
     }
     
