@@ -1,3 +1,5 @@
+Implemented word-count tool as per the [challenge description](https://codingchallenges.fyi/challenges/challenge-wc).
+
 Current solution uses std::istream to read data from files/stdin.
 
 Possible future optimizations:
