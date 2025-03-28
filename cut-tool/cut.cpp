@@ -49,12 +49,13 @@ constexpr bool ends_with(std::string_view source, char target)
 
 bool convert_to_int64(const char* start, const char* end, std::uint_least64_t& value)
 {
-    auto [_, ec] = std::from_chars(start, end, value);
-    return ec != std::errc::invalid_argument && ec != std::errc::result_out_of_range;
+    auto [ptr, ec] = std::from_chars(start, end, value);
+    return ptr == end && ec != std::errc::invalid_argument && ec != std::errc::result_out_of_range;
 }
 
-void split_by_delimiter_and_extract_fields(std::string_view field, Config& config, char delimiter = ' ')
+bool split_by_delimiter_and_extract_fields(std::string_view field, Config& config, char delimiter = ' ')
 {
+    bool no_error = true;
     while (true)
     {
         auto pos = field.find(delimiter);
@@ -64,6 +65,7 @@ void split_by_delimiter_and_extract_fields(std::string_view field, Config& confi
             if (!convert_to_int64(field.data(), field.data() + field.size(), value))
             {
                 config.m_fields.clear();
+                no_error = false;
                 break;
             }
             config.m_fields.push_back(value);
@@ -74,12 +76,14 @@ void split_by_delimiter_and_extract_fields(std::string_view field, Config& confi
             if (!convert_to_int64(field.data(), field.data() + pos, value))
             {
                 config.m_fields.clear();
+                no_error = false;
                 break;
             }
             field = field.substr(pos + 1);
             config.m_fields.push_back(value);
         }
     }
+    return no_error;
 }
 
 constexpr std::string_view remove_quotes(std::string_view field)
@@ -92,21 +96,21 @@ constexpr std::string_view remove_quotes(std::string_view field)
     return field;
 }
 
-constexpr void extract_fields(std::string_view field, Config& config)
+constexpr bool extract_fields(std::string_view field, Config& config)
 {
     field = remove_quotes(field);
     if (field.empty())
     {
-        return;
+        return false;
     }
 
     if (field.find(',') != std::string_view::npos)
     {
-        split_by_delimiter_and_extract_fields(field, config, ',');
+        return split_by_delimiter_and_extract_fields(field, config, ',');
     }
     else
     {
-        split_by_delimiter_and_extract_fields(field, config);
+        return split_by_delimiter_and_extract_fields(field, config);
     }
 }
 
@@ -178,14 +182,22 @@ int main(int argc, char** argv)
             // Extract next arg string and parse for fields
             ++arg_index;
             std::string_view field{argv[arg_index]};
-            extract_fields(field, config);
+            if (!extract_fields(field, config))
+            {
+                std::cerr << "Some error occured during parsing fields\n";
+                return 1;
+            }
         }
         else if (starts_with(arg, "-f"))
         {
             // Extract substring [2...] and parse for fields
             std::string_view field{argv[arg_index]};
             field = field.substr(2);
-            extract_fields(field, config);
+            if (!extract_fields(field, config))
+            {
+                std::cerr << "Some error occured during parsing fields\n";
+                return 1;
+            }
         }
         else if (arg == "-d")
         {
