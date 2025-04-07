@@ -23,6 +23,139 @@ struct Config
     }
 };
 
+class UTF8Decoder
+{
+    std::string_view m_buffer;
+    unsigned int m_buffer_index;
+
+    bool get_next_character(unsigned char& c)
+    {
+        if (m_buffer_index >= m_buffer.size())
+        {
+            return false;
+        }
+        c = m_buffer[m_buffer_index];
+        m_buffer_index++;
+        return true;
+    }
+public:
+    static constexpr char32_t utf_replacement_character = 0xFFFD;
+
+    UTF8Decoder(std::string_view input_string)
+        : m_buffer{std::move(input_string)}, m_buffer_index{0}
+    {
+    }
+
+    bool get_next_codepoint(char32_t& utf32_codepoint)
+    {
+        unsigned int state = 0;
+        do
+        {
+            unsigned char c;
+            if (!get_next_character(c))
+            {
+                return false;
+            }
+            // Decoding UTF-8 bytes into UTF-32 codepoints
+            // Reference: https://writings.sh/post/en/utf8
+            switch (state)
+            {
+                case 0:
+                    if (c >= 0x0 && c <= 0x7f)
+                    {
+                        utf32_codepoint = c;
+                    }
+                    else if (c >= 0xc2 && c <= 0xdf)
+                    {
+                        state = 1;
+                        utf32_codepoint = c & 0x1f;
+                    }
+                    else if (c == 0xe0)
+                    {
+                        state = 4;
+                        utf32_codepoint = c & 0xf;
+                    }
+                    else if (c >= 0xe1 && c <= 0xef)
+                    {
+                        state = 2;
+                        utf32_codepoint = c & 0xf;
+                    }
+                    else if (c == 0xf0)
+                    {
+                        state = 5;
+                        utf32_codepoint = c & 0x7;
+                    }
+                    else if (c >= 0xf1 && c <= 0xf3)
+                    {
+                        state = 3;
+                        utf32_codepoint = c & 0x7;
+                    }
+                    else if (c == 0xf4)
+                    {
+                        state = 6;
+                        utf32_codepoint = c & 0x7;
+                    }
+                    else
+                    {
+                        state = 8;
+                    }
+                    break;
+                case 1:
+                case 2:
+                case 3:
+                    if (c >= 0x80 && c <= 0xbf)
+                    {
+                        state--;
+                        utf32_codepoint = (utf32_codepoint << 6) | (c & 0x3f);
+                    }
+                    else
+                    {
+                        state = 8;
+                    }
+                    break;
+                case 4:
+                    if (c >= 0xa0 && c <= 0xbf)
+                    {
+                        state = 1;
+                        utf32_codepoint = (utf32_codepoint << 6) | (c & 0x3f);
+                    }
+                    else
+                    {
+                        state = 8;
+                    }
+                    break;
+                case 5:
+                    if (c >= 0x90 && c <= 0xbf)
+                    {
+                        state = 2;
+                        utf32_codepoint = (utf32_codepoint << 6) | (c & 0x3f);
+                    }
+                    else
+                    {
+                        state = 8;
+                    }
+                    break;
+                case 6:
+                    if (c >= 0x80 && c <= 0x8f)
+                    {
+                        state = 2;
+                        utf32_codepoint = (utf32_codepoint << 6) | (c & 0x3f);
+                    }
+                    else
+                    {
+                        state = 8;
+                    }
+                    break;
+                default:
+                    state = 8;
+                    break;
+            }
+        } while (state != 0 && state != 8);
+        utf32_codepoint = (state == 8 ? utf_replacement_character : utf32_codepoint);
+        return true;
+    }
+};
+
 struct Output
 {
     uint64_t m_bytes = 0;
@@ -115,150 +248,29 @@ bool is_white_space(char32_t c)
     // return c == U' ' || c == U'\n' || c == U'\t' || c == U'\r' || c == U'\v' || c == U'\f';
 }
 
-bool process_file(const std::string& file_contents, Output& output)
+void process_file(const std::string& file_contents, Output& output)
 {
-    // Reference: https://writings.sh/post/en/utf8
-
-    char32_t utf32_codepoint;
-    unsigned int state = 0;
+    char32_t utf32_codepoint = 0x0;
     bool is_word_under_process = false;
 
-    for (unsigned char c : file_contents)
+    output.m_bytes = file_contents.length();
+    output.m_lines = std::count_if(file_contents.begin(), file_contents.end(), [](unsigned char c) { return c == '\n'; });
+
+    UTF8Decoder decoder{file_contents};
+    while (decoder.get_next_codepoint(utf32_codepoint))
     {
-        // Process bytes
-        output.m_bytes++;
-
-        // Process lines
-        if (c == '\n')
+        output.m_chars++;
+        // Process words
+        if (is_white_space(utf32_codepoint) && is_word_under_process)
         {
-            output.m_lines++;
+            output.m_words++;
+            is_word_under_process = false;
         }
-
-        // Decoding UTF-8 bytes into UTF-32 codepoints
-        switch (state)
+        else if (!is_white_space(utf32_codepoint))
         {
-            case 0:
-                if (c >= 0x0 && c <= 0x7f)
-                {
-                    utf32_codepoint = c;
-                }
-                else if (c >= 0xc2 && c <= 0xdf)
-                {
-                    state = 1;
-                    utf32_codepoint = c & 0x1f;
-                }
-                else if (c == 0xe0)
-                {
-                    state = 4;
-                    utf32_codepoint = c & 0xf;
-                }
-                else if (c >= 0xe1 && c <= 0xef)
-                {
-                    state = 2;
-                    utf32_codepoint = c & 0xf;
-                }
-                else if (c == 0xf0)
-                {
-                    state = 5;
-                    utf32_codepoint = c & 0x7;
-                }
-                else if (c >= 0xf1 && c <= 0xf3)
-                {
-                    state = 3;
-                    utf32_codepoint = c & 0x7;
-                }
-                else if (c == 0xf4)
-                {
-                    state = 6;
-                    utf32_codepoint = c & 0x7;
-                }
-                else
-                {
-                    state = 8;
-                }
-                break;
-            case 1:
-            case 2:
-            case 3:
-                if (c >= 0x80 && c <= 0xbf)
-                {
-                    state--;
-                    utf32_codepoint = (utf32_codepoint << 6) | (c & 0x3f);
-                }
-                else
-                {
-                    state = 8;
-                }
-                break;
-            case 4:
-                if (c >= 0xa0 && c <= 0xbf)
-                {
-                    state = 1;
-                    utf32_codepoint = (utf32_codepoint << 6) | (c & 0x3f);
-                }
-                else
-                {
-                    state = 8;
-                }
-                break;
-            case 5:
-                if (c >= 0x90 && c <= 0xbf)
-                {
-                    state = 2;
-                    utf32_codepoint = (utf32_codepoint << 6) | (c & 0x3f);
-                }
-                else
-                {
-                    state = 8;
-                }
-                break;
-            case 6:
-                if (c >= 0x80 && c <= 0x8f)
-                {
-                    state = 2;
-                    utf32_codepoint = (utf32_codepoint << 6) | (c & 0x3f);
-                }
-                else
-                {
-                    state = 8;
-                }
-                break;
-            default:
-                state = 8;
-                break;
-        }
-
-        if (state == 8)
-        {
-            // Improvement:
-            // In case there is an encoding error, just skip it instead of returning an error.
-            // Byte count and line count was affected, but char and word count wasn't.
-            // Next state needs to be set to 0.
-
-            //std::cerr << "Failure: bad encoding\n";
-            //return false;
-            state = 0;
-            continue;
-        }
-        else if (state == 0)
-        {
-            // Process chars
-            output.m_chars++;
-
-            // Process words
-            if (is_white_space(utf32_codepoint) && is_word_under_process)
-            {
-                output.m_words++;
-                is_word_under_process = false;
-            }
-            else if (!is_white_space(utf32_codepoint))
-            {
-                is_word_under_process = true;
-            }
+            is_word_under_process = true;
         }
     }
-    
-    return state == 0;
 }
 }   // namespace
 
@@ -312,10 +324,7 @@ int main(int argc, char** argv)
     {
         return 1;
     }
-    if (!process_file(file_contents, output))
-    {
-        return 1;
-    }
+    process_file(file_contents, output);
 
     if (config.m_line_counter)
     {
