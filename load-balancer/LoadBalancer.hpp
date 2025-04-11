@@ -5,7 +5,11 @@
 #include <asio/signal_set.hpp>
 #include <string_view>
 #include <vector>
+#include <queue>
 #include <mutex>
+#include <atomic>
+#include <condition_variable>
+#include <spdlog/spdlog.h>
 #include "UserClient.hpp"
 #include "Client.hpp"
 
@@ -37,11 +41,29 @@ class LoadBalancer
     std::mutex m_clients_mutex;
     std::vector<ServerDetails> m_servers;
     asio::ip::tcp::acceptor m_acceptor;
-    bool m_is_stopped = false;
+    std::atomic_bool m_is_stopped = false;
     std::size_t m_last_server_index;
-    unsigned short m_port;
+    std::string_view m_ip_address;
+    std::string_view m_port;
 
     std::int_least64_t m_user_client_count;
+
+    std::shared_ptr<spdlog::logger> m_logger;
+
+    // We cannot call destructors (unique_ptr::reset) of UserClient and Client objects
+    // from their respective handler functions (results in system throwing deadlock error).
+    // The destructors join the io_context_thread and when we call from handler function, it's like thread
+    // is trying to join itself, which is not possible.
+    // Thus we have to call them outside of handlers, created these threads below to handle that.
+    // What we need to delete, we push to the respective queues and then in separate thread, it gets deleted.
+    std::queue<std::string> m_to_delete_clients;
+    std::mutex m_to_delete_clients_mutex;
+    std::condition_variable m_to_delete_clients_cv;
+    std::queue<std::string> m_to_delete_servers;
+    std::mutex m_to_delete_servers_mutex;
+    std::condition_variable m_to_delete_servers_cv;
+    std::thread m_unused_clients_deleter;
+    std::thread m_unused_servers_deleter;
 
     void handle_accept(const asio::error_code& error, std::string user_client_id);
     bool get_next_available_server(std::size_t& index);
@@ -50,7 +72,7 @@ class LoadBalancer
     void on_server_read_done(std::array<unsigned char, 2048>, asio::error_code, std::size_t, std::string, std::string);
     void on_server_write_done(std::array<unsigned char, 2048>, asio::error_code, std::size_t, std::string, std::string);
 public:
-    LoadBalancer(unsigned short port);
+    LoadBalancer(std::string_view ip_address, std::string_view port);
     ~LoadBalancer();
     void start();
     void stop();

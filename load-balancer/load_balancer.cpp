@@ -12,7 +12,7 @@ int main(int argc, char** argv)
         {"127.0.0.1", "8082"},
     };
 
-    kload_balancer::LoadBalancer lb{80u};
+    kload_balancer::LoadBalancer lb{"0.0.0.0", "2000"};
     std::for_each(server_list.begin(), server_list.end(), [&lb](const std::pair<std::string, std::string>& server)
     {
         const auto& [ip_address, port] = server;

@@ -1,4 +1,6 @@
 #include "UserClient.hpp"
+#include <spdlog/sinks/stdout_color_sinks.h>
+#include <iostream>
 
 namespace kload_balancer
 {
@@ -16,6 +18,11 @@ UserClient::~UserClient()
         m_socket.cancel();
     }
     m_work_guard.reset();
+    while (!m_io_context.stopped())
+    {
+        m_io_context.stop();
+    }
+
     m_io_context_thread.join();
     if (m_socket.is_open())
     {
@@ -46,6 +53,7 @@ void UserClient::read()
 
 void UserClient::write(const std::array<unsigned char, 2048> &payload)
 {
+    std::copy(payload.begin(), payload.end(), m_write_buffer.begin());
     m_socket.async_write_some(asio::buffer(m_write_buffer),
         [this](const asio::error_code &error, std::size_t bytes_transferred)
         {

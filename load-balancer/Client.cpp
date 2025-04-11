@@ -25,6 +25,11 @@ Client::~Client()
         m_socket.cancel();
     }
     m_work_guard.reset();
+    while (!m_io_context.stopped())
+    {
+        m_io_context.stop();
+    }
+
     m_io_context_thread.join();
     if (m_socket.is_open())
     {
@@ -35,6 +40,7 @@ Client::~Client()
 
 void Client::read(std::string user_client_id)
 {
+    std::fill(m_read_buffer.begin(), m_read_buffer.end(), 0x0);
     m_socket.async_read_some(asio::buffer(m_read_buffer),
         [this, user_client_id](const asio::error_code &error, std::size_t bytes_transferred)
         {
