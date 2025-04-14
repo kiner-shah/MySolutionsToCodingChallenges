@@ -6,35 +6,10 @@
 
 namespace kload_balancer
 {
-LoadBalancer::ServerDetails::ServerDetails(std::string_view ip, std::string_view port)
-    : m_ip{std::move(ip)}, m_port{std::move(port)}, m_is_available{true}
-{
-}
-
-bool LoadBalancer::ServerDetails::is_available() const
-{
-    return m_is_available;
-}
-
-std::string_view LoadBalancer::ServerDetails::get_ip() const
-{
-    return m_ip;
-}
-
-std::string_view LoadBalancer::ServerDetails::get_port() const
-{
-    return m_port;
-}
-
-void LoadBalancer::ServerDetails::set_available(bool status)
-{
-    m_is_available = status;
-}
-
-LoadBalancer::LoadBalancer(std::string_view ip_address, std::string_view port)
-    : m_signals{m_io_context}, m_acceptor{m_io_context},
-    m_last_server_index{0}, m_ip_address{std::move(ip_address)},
-    m_port{std::move(port)}, m_user_client_count{0}, m_logger{spdlog::stdout_color_mt("LoadBalancer")}
+LoadBalancer::LoadBalancer(std::string_view ip_address, std::string_view port, std::int_least64_t health_check_period_in_seconds)
+    : m_signals{m_io_context}, m_acceptor{m_io_context}, m_ip_address{std::move(ip_address)},
+    m_port{std::move(port)}, m_user_client_count{0}, m_logger{spdlog::stdout_color_mt("LoadBalancer")},
+    m_health_checker{std::make_unique<HealthChecker>(health_check_period_in_seconds)}
 {
     m_logger->set_level(spdlog::level::debug);
     m_logger->set_pattern("%Y-%m-%d %H:%M:%S | %n | %-8l | %v");
@@ -108,6 +83,8 @@ LoadBalancer::LoadBalancer(std::string_view ip_address, std::string_view port)
         }
     });
 
+    m_health_checker->start();
+
     accept();
 }
 
@@ -168,7 +145,7 @@ void LoadBalancer::stop()
 
 void LoadBalancer::add_server(std::string_view ip_address, std::string_view port)
 {
-    m_servers.emplace_back(std::move(ip_address), std::move(port));
+    m_health_checker->add_server(std::move(ip_address), std::move(port));
 }
 
 void LoadBalancer::accept()
@@ -232,24 +209,6 @@ void LoadBalancer::handle_accept(const asio::error_code &error, std::string user
     }
 }
 
-bool LoadBalancer::get_next_available_server(std::size_t &index)
-{
-    index = (m_last_server_index + 1) % m_servers.size();
-    std::size_t unavailable_count = 0;
-    // TODO: implement health check
-    while (!m_servers[index].is_available())
-    {
-        index = (index + 1) % m_servers.size();
-        unavailable_count++;
-        if (unavailable_count == m_servers.size())
-        {
-            return false;
-        }
-    }
-    m_last_server_index = index;
-    return true;
-}
-
 void LoadBalancer::on_client_read_done(std::array<unsigned char, 2048> read_data, asio::error_code error, std::size_t bytes_transferred, std::string user_client_id)
 {
     if (error)
@@ -257,9 +216,9 @@ void LoadBalancer::on_client_read_done(std::array<unsigned char, 2048> read_data
         return;
     }
     m_logger->debug("Received message from [UserClientId {}]:\n{}", user_client_id, std::string{read_data.begin(), read_data.end()});
-    // get_next_available_server
-    std::size_t server_index{0};
-    if (!get_next_available_server(server_index))
+    // Get next available server
+    auto next_available_server = m_health_checker->get_next_available_server();
+    if (!next_available_server)
     {
         std::scoped_lock<std::mutex> user_client_lock(m_user_clients_mutex);
 
@@ -280,13 +239,13 @@ void LoadBalancer::on_client_read_done(std::array<unsigned char, 2048> read_data
         (*it)->write(buffer);
         return;
     }
-    m_logger->debug("Connecting to server {}:{} for [UserClientId {}]", m_servers[server_index].get_ip(), m_servers[server_index].get_port(), user_client_id);
+    m_logger->debug("Connecting to server {}:{} for [UserClientId {}]", next_available_server.value().get_ip(), next_available_server.value().get_port(), user_client_id);
     {
         // establish connection to server
         std::scoped_lock<std::mutex> client_lock(m_clients_mutex);
         // TODO: if connect() fails it will throw an std::system_error which is not caught here.
         //       Not sure what needs to be done when that happens.
-        m_clients.emplace_back(std::make_unique<Client>(m_servers[server_index].get_ip(), m_servers[server_index].get_port(),
+        m_clients.emplace_back(std::make_unique<Client>(next_available_server.value().get_ip(), next_available_server.value().get_port(),
             [this](std::array<unsigned char, 2048> data, asio::error_code error, std::size_t bytes_transferred, std::string user_client_id, std::string server_endpoint)
             {
                 on_server_read_done(data, error, bytes_transferred, user_client_id, server_endpoint);

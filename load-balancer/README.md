@@ -71,3 +71,21 @@ LoadBalancer:
 
     ~LoadBalancer() -> calls stop()
 
+
+HealthChecker:
+    io_context
+    steady_timer
+    std::vector<server_details>
+    thread -> for closing server connections
+    delete_client_list
+    mutex -> for delete_client_list
+
+    HealthChecker(period) -> initializes timer, starts thread
+    add_server(ip_address, port) -> adds a new server to vector
+    std::optional<ServerDetails> get_next_available_server()
+    start() -> calls async_wait and runs io_context
+    cancel() -> cancels timer
+    perform_health_check() -> connects to servers and sends a GET request
+    handle_timer_complete() -> calls perform_health_check(), sets new expiry and calls async_wait
+    on_server_write_done() -> calls server read
+    on_server_read_done() -> sets availability (if no error), closes server connection in separate thread
