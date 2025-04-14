@@ -2,6 +2,7 @@
 
 #include <array>
 #include <string_view>
+#include "ServerDetails.hpp"
 
 namespace kload_balancer
 {
@@ -26,4 +27,6 @@ constexpr std::array<unsigned char, 2048> get_internal_server_error_message()
     constexpr std::string_view message{"HTTP/1.1 500 Internal Server Error\r\nContent-Type: text/html;\r\nContent-Length: 25\r\n\r\n500 Internal Server Error"};
     return get_buffer_from_message(message);
 }
+
+std::array<unsigned char, 2048> construct_health_check_message(const ServerDetails& server);
 }   // namespace kload_balancer
