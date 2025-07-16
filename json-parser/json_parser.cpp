@@ -45,6 +45,13 @@ bool parse_json(std::istream& input)
 
 int main(int argc, char** argv)
 {
+    if (argc < 1 || argc > 2)
+    {
+        std::cerr << "Usage: " << argv[0] << " [filename]\n";
+        std::cerr << "\nfilename\tInput file path. This is optional, in absence of this path, input will be taken from stdin\n";
+        return 1;
+    }
+
     bool result = false;
     if (argc == 1)
     {

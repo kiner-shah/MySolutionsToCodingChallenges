@@ -1,5 +1,6 @@
 #include "Parser.hpp"
 #include <iostream>
+#include <algorithm>
 
 namespace kjson
 {
@@ -46,7 +47,6 @@ void Parser::print_rule(LeftSideNonTerminal non_terminal, const Rule& rule) cons
 
 Parser::Parser()
 {
-    RightSideTerminal whitespace = make_right_side_terminal(TokenType::whitespace, true);
     RightSideTerminal cstring = make_right_side_terminal(TokenType::string_value, true);
     RightSideTerminal comma = make_right_side_terminal(TokenType::comma, false);
     RightSideTerminal colon = make_right_side_terminal(TokenType::colon, false);
@@ -60,11 +60,11 @@ Parser::Parser()
     RightSideTerminal double_quote = make_right_side_terminal(TokenType::dbl_quote, false);
 
     m_rule_map[LeftSideNonTerminal::json] = {
-        {whitespace, LeftSideNonTerminal::object, whitespace},
-        {whitespace, LeftSideNonTerminal::array, whitespace}
+        {LeftSideNonTerminal::object},
+        {LeftSideNonTerminal::array}
     };
     m_rule_map[LeftSideNonTerminal::element] = {
-        {whitespace, LeftSideNonTerminal::value, whitespace}
+        {LeftSideNonTerminal::value}
     };
     m_rule_map[LeftSideNonTerminal::elements] = {
         {LeftSideNonTerminal::element, comma, LeftSideNonTerminal::elements},
@@ -80,18 +80,18 @@ Parser::Parser()
     };
     m_rule_map[LeftSideNonTerminal::object] = {
         {opening_brace, LeftSideNonTerminal::members, closing_brace},
-        {opening_brace, whitespace, closing_brace}
+        {opening_brace, closing_brace}
     };
     m_rule_map[LeftSideNonTerminal::members] = {
         {LeftSideNonTerminal::member, comma, LeftSideNonTerminal::members},
         {LeftSideNonTerminal::member}
     };
     m_rule_map[LeftSideNonTerminal::member] = {
-        {whitespace, LeftSideNonTerminal::string, whitespace, colon, LeftSideNonTerminal::element}
+        {LeftSideNonTerminal::string, colon, LeftSideNonTerminal::element}
     };
     m_rule_map[LeftSideNonTerminal::array] = {
         {opening_sq_brace, LeftSideNonTerminal::elements, closing_sq_brace},
-        {opening_sq_brace, whitespace, closing_sq_brace}
+        {opening_sq_brace, closing_sq_brace}
     };
     m_rule_map[LeftSideNonTerminal::string] = {
         {double_quote, cstring, double_quote}
@@ -198,10 +198,19 @@ bool Parser::parse(const std::vector<Token> &tokens)
     {
         return false;
     }
+    // Filter out all tokens that are whitespace as our parser
+    // will have rules that excludes whitespace
+    std::vector<kjson::Token> filtered_tokens;
+    std::copy_if(tokens.begin(), tokens.end(), std::back_inserter(filtered_tokens),
+                 [](const kjson::Token &token)
+                 {
+                     return token.m_type != kjson::TokenType::whitespace;
+                 });
+
     size_t start_token_index = 0;
-    bool result = parse_json(tokens, start_token_index, 0, LeftSideNonTerminal::json);
+    bool result = parse_json(filtered_tokens, start_token_index, 0, LeftSideNonTerminal::json);
     // Case when there are extra tokens after the actual JSON structure
-    if (result && start_token_index < tokens.size())
+    if (result && start_token_index < filtered_tokens.size())
     {
         // std::cerr << "Failed as there are extra tokens\n";
         return false;
