@@ -74,7 +74,6 @@ bool process_file(std::istream &is, Output &output)
                 output.m_bytes += len;
                 if (!first_char)
                 {
-                    previous_wide_char = current_wide_char;
                     first_char = true;
                 }
                 // Process lines

@@ -258,7 +258,7 @@ std::vector<unsigned char> HuffmanTree::serialize(std::uint64_t& total_bits)
 std::vector<unsigned char> HuffmanTree::serialize_payload(const std::vector<char32_t> &codepoint_sequence, std::uint64_t& total_bits)
 {
     std::vector<unsigned char> output_buffer;
-    unsigned char byte;
+    unsigned char byte = 0;
     unsigned char remaining_bits = 8;
     for (auto codepoint : codepoint_sequence)
     {
@@ -386,10 +386,13 @@ void HuffmanTree::deserialize(const std::vector<unsigned char> &serialized_tree,
     unsigned char remaining_bits = 8;
     std::size_t index = 0;
 
-    if (m_root)
-    {
-        destroy_tree(m_root);
-    }
+    // Note: below block shouldn't be required in case of a binary since only one operation is done at a time - encoding or decoding
+    // In case in future, someone wishes to convert this into a library, this block should be uncommented. It will give weird output
+    // if encoding is done followed by decoding
+    // if (m_root)
+    // {
+    //     destroy_tree(m_root);
+    // }
 
     m_root = deserialize(serialized_tree, serialized_tree_bits, index, total_processed_bits, remaining_bits, m_root);
 

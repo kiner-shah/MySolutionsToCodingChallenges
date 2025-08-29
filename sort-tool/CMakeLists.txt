@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.14)
 project(SortTool CXX)
 
 set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 add_executable(KSort sort.cpp QuickSort.cpp MergeSort.cpp HeapSort.cpp RadixSort.cpp RandomSort.cpp)
 if (WIN32 OR MSVC)

@@ -12,8 +12,8 @@ namespace
 {
 struct Config
 {
-    std::string input_file_path;
-    std::string output_file_path;
+    std::string input_file_path = {};
+    std::string output_file_path = {};
     bool should_decode = false;
 
     friend std::ostream& operator<<(std::ostream& os, const Config& config);
