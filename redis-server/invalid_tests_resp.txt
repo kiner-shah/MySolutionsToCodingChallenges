@@ -1,0 +1,27 @@
++incomplete string without CRLF
+-ERROR missing CRLF
+:123missing CRLF
+$5\r\nhell
+$-2\r\n
+$abc\r\nhello\r\n
+*2\r\n$5\r\nhello
+*-2\r\n
+*abc\r\n$5\r\nhello\r\n
++\r\n
+-\r\n
+:\r\n
+$\r\n
+*\r\n
+$5\r\nhello world\r\n
+:12.34\r\n
+:abc\r\n
+*2\r\n$5\r\nhello\r\n$-1
+*1\r\n$3\r\nfoo\r\n$4\r\nbar\r\n
+$10\r\nshort\r\n
+*3\r\n$3\r\nfoo\r\n$3\r\nbar\r\n
+@invalid_type\r\nhello\r\n
+$-1\r\nextra_data\r\n
+*0\r\n$3\r\nfoo\r\n
++hello\nworld\r\n
+$5\r\nhell\x00\r\n
+*2\r\n$3\r\nfoo\r\n:123
