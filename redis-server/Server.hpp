@@ -12,6 +12,9 @@
 #include <thread>
 #include <atomic>
 #include "Client.hpp"
+#include "RespParser.hpp"
+#include "RespGenerator.hpp"
+#include "CommandProcessor.hpp"
 
 namespace kredis
 {
@@ -32,7 +35,11 @@ class Server
     std::mutex m_to_delete_clients_mutex;
     std::condition_variable m_to_delete_clients_cv;
     std::thread m_unused_clients_deleter;
+    RespParser m_resp_parser;
+    RespGenerator m_resp_generator;
+    CommandProcessor m_command_processor;
 
+    void remove_client(const std::string& client_id);
     void handle_accept(const asio::error_code& error, std::string client_id);
     void on_read_done(std::array<unsigned char, 2048>, asio::error_code, std::size_t, std::string);
     void on_write_done(std::array<unsigned char, 2048>, asio::error_code, std::size_t, std::string);
