@@ -18,6 +18,16 @@ struct RespString
 using RespError = std::string;
 using RespInt = std::int64_t;
 using RespNull = std::nullptr_t;
-using RespArray = std::vector<std::variant<RespString, RespInt, RespNull>>;
-using RespType = std::variant<RespString, RespInt, RespError, RespArray, RespNull>;
+
+// Forward declaration for recursive types
+struct RespType;
+
+// Now RespArray can contain any RespType, enabling full nesting
+using RespArray = std::vector<RespType>;
+
+// Define the main variant type that includes all RESP types
+struct RespType : std::variant<RespString, RespInt, RespError, RespArray, RespNull>
+{
+    using variant::variant;
+};
 }   // namespace kredis

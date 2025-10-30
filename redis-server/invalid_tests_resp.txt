@@ -25,3 +25,6 @@ $-1\r\nextra_data\r\n
 +hello\nworld\r\n
 $5\r\nhell\x00\r\n
 *2\r\n$3\r\nfoo\r\n:123
+*2\r\n$3\r\nGET\r\n$3\r\n
+*2\r\n$4\r\nECHO\r\n$11\r\n\r\n*1\r\n$4\r\nPING\r\n
+*2\r\n$4\r\nECHO\r\n*1\r\n$4\r\nPING\r\n
