@@ -4,7 +4,14 @@
 
 namespace kredis
 {
-void Server::handle_accept(const asio::error_code &error, std::string client_id)
+void Server::remove_client(const std::string& client_id)
+{
+    std::scoped_lock<std::mutex> lock{m_to_delete_clients_mutex};
+    m_to_delete_clients.push(client_id);
+    m_to_delete_clients_cv.notify_one();
+}
+
+void Server::handle_accept(const asio::error_code& error, std::string client_id)
 {
     // Check whether the server was stopped by a signal before this
     // completion handler had a chance to run.
@@ -13,7 +20,7 @@ void Server::handle_accept(const asio::error_code &error, std::string client_id)
         return;
     }
 
-    m_logger->debug("New connection request [ClientId {}]", client_id);
+    m_logger->info("New connection request [ClientId {}]", client_id);
     {
         std::unique_lock<std::mutex> client_lock{m_clients_mutex};
         auto it = std::find_if(m_clients.begin(), m_clients.end(),
@@ -45,14 +52,26 @@ void Server::handle_accept(const asio::error_code &error, std::string client_id)
 
 void Server::on_read_done(std::array<unsigned char, 2048> read_data, asio::error_code error, std::size_t bytes_transferred, std::string client_id)
 {
+    auto find_client = [&client_id](const ClientPtr& client) { return client_id == client->get_id(); };
+    auto write_to_client = [&client_id, &find_client, this](const std::string& message)
+    {
+        std::scoped_lock<std::mutex> lock{m_clients_mutex};
+        auto it = std::find_if(m_clients.begin(), m_clients.end(), find_client);
+        if (it != m_clients.end())
+        {
+            std::array<unsigned char, 2048> buffer;
+            std::copy(message.begin(), message.end(), buffer.begin());
+            (*it)->write(buffer, message.length());
+        }
+    };
+
     if (error)
     {
         if (error == asio::error::connection_reset || error == asio::error::eof)
         {
             // Client is no longer connected, remove from clients list
-            std::scoped_lock<std::mutex> lock{m_to_delete_clients_mutex};
-            m_to_delete_clients.push(client_id);
-            m_to_delete_clients_cv.notify_one();
+            m_logger->warn("Client is no longer connected [ClientId {}]", client_id);
+            remove_client(client_id);
         }
         else
         {
@@ -60,52 +79,51 @@ void Server::on_read_done(std::array<unsigned char, 2048> read_data, asio::error
         }
         return;
     }
-    m_logger->debug("Received message from [ClientId {}]:\n{}", client_id, std::string{read_data.begin(), read_data.end()});
-    // TODO:
-    // Do some processing
+    std::string message{read_data.begin(), read_data.begin() + bytes_transferred};
+    m_logger->debug("Received message [Length={}] from [ClientId {}]:\n{}", message.length(),client_id, message);
 
-    // Write back to client
-    // TODO: below is dummy code, remove later
-    RespGenerator generator{m_logger};
-    std::string response = generator.generate(RespString{"PONG", false});
+    // Parse the message
+    RespType command;
+    if (!m_resp_parser.parse(message, command))
     {
-        std::scoped_lock<std::mutex> lock{m_clients_mutex};
-        auto it = std::find_if(m_clients.begin(), m_clients.end(),
-            [&client_id](const ClientPtr& client)
-            {
-                return client->get_id() == client_id;
-            });
-        if (it != m_clients.end())
-        {
-            std::array<unsigned char, 2048> buffer;
-            std::copy(response.begin(), response.end(), buffer.begin());
-            (*it)->write(buffer);
-        }
+        m_logger->error("Failed to parse message from [ClientId {}]: {}", client_id, message);
+        // Send error response (RespError)
+        RespError error{"INVALID_INPUT_FORMAT"};
+        std::string error_response = m_resp_generator.generate(error);
+        write_to_client(error_response);
+        return;
     }
+
+    // Parse the command and perform respectful operation
+    RespType response_value;
+    std::string response_message{};
+    if (!m_command_processor.process(command, response_value))
+    {
+        RespError error{"INVALID_INPUT_FORMAT"};
+        response_message = m_resp_generator.generate(error);
+    }
+    else
+    {
+        response_message = m_resp_generator.generate(response_value);
+    }
+
+    // Write back the response to client
+    write_to_client(response_message);
 }
 
 void Server::on_write_done(std::array<unsigned char, 2048> write_data, asio::error_code error, std::size_t bytes_transferred, std::string client_id)
 {
     if (error)
     {
-        if (error == asio::error::connection_reset || error == asio::error::eof)
-        {
-            // Client is no longer connected, remove from clients list
-            std::scoped_lock<std::mutex> lock{m_to_delete_clients_mutex};
-            m_to_delete_clients.push(client_id);
-            m_to_delete_clients_cv.notify_one();
-        }
-        else
-        {
-            m_logger->warn("Error occured during write: {}", error.message());
-        }
-        return;
+        m_logger->warn("Error occured during write: {}", error.message());
     }
-    m_logger->debug("Sent message to [ClientId {}]:\n{}", client_id, std::string{write_data.begin(), write_data.end()});
+    m_logger->debug("Sent message [Length={}] to [ClientId {}]:\n{}", bytes_transferred, client_id, std::string{write_data.begin(), write_data.begin() + bytes_transferred});
+    remove_client(client_id);
 }
 
 Server::Server()
-    : m_signals{m_io_context}, m_acceptor{m_io_context}, m_logger{spdlog::stdout_color_mt("RedisServer")}, m_client_count{0}
+    : m_signals{m_io_context}, m_acceptor{m_io_context}, m_logger{spdlog::stdout_color_mt("RedisServer")},
+    m_client_count{0}, m_resp_parser{m_logger}, m_resp_generator{m_logger}, m_command_processor{m_logger}
 {
     m_logger->set_level(spdlog::level::debug);
     m_logger->set_pattern("%Y-%m-%d %H:%M:%S | %n | %-8l | %v");
@@ -171,13 +189,13 @@ void Server::start()
 
 void Server::stop()
 {
-    m_is_stopped = true;
     m_io_context.stop();
     {
         std::unique_lock<std::mutex> lock_clients{m_clients_mutex};
         bool is_empty = m_clients.empty();
         for (const auto& ptr : m_clients)
         {
+            m_logger->debug("Stopping client [ClientId {}]", ptr->get_id());
             std::scoped_lock<std::mutex> lock{m_to_delete_clients_mutex};
             m_to_delete_clients.push(ptr->get_id());
             m_to_delete_clients_cv.notify_one();
@@ -190,6 +208,7 @@ void Server::stop()
             m_to_delete_clients_cv.notify_one();
         }
     }
+    m_is_stopped = true;
 }
 
 void Server::accept()

@@ -58,8 +58,12 @@ void Client::read()
     m_socket.async_read_some(asio::buffer(m_read_buffer), std::bind(&Client::handle_read, this, std::placeholders::_1, std::placeholders::_2));
 }
 
-void Client::write(const std::array<unsigned char, 2048> &payload)
+void Client::write(const std::array<unsigned char, 2048> &payload, std::size_t length)
 {
-    m_socket.async_write_some(asio::buffer(payload), std::bind(&Client::handle_write, this, std::placeholders::_1, std::placeholders::_2));
+    std::copy(payload.begin(), payload.end(), m_write_buffer.begin());
+    m_socket.async_write_some(
+        asio::buffer(m_write_buffer, length),
+        std::bind(&Client::handle_write, this, std::placeholders::_1, std::placeholders::_2)
+    );
 }
 }
