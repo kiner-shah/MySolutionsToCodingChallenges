@@ -9,6 +9,14 @@ These dependencies should be present in the project root directory.
 - asio should be downloaded and extracted in the project root directory
 
 ## Scribble
+Integer:
+- Check for ':'
+- Then continue reading digits
+- If non-digit encountered, note that as error
+- If "\r\n" is encountered, note that as success
+- Note the end position of parse
+- If parse failed, retry parsing from end position as the new start position
+
 RedisServer
 - vector<ClientPtr>
 - io_context

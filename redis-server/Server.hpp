@@ -41,8 +41,8 @@ class Server
 
     void remove_client(const std::string& client_id);
     void handle_accept(const asio::error_code& error, std::string client_id);
-    void on_read_done(std::array<unsigned char, 2048>, asio::error_code, std::size_t, std::string);
-    void on_write_done(std::array<unsigned char, 2048>, asio::error_code, std::size_t, std::string);
+    bool on_read_done(const std::string&, asio::error_code, std::size_t, const std::string&);
+    void on_write_done(const std::array<unsigned char, 2048>&, asio::error_code, std::size_t, const std::string&);
 public:
     Server();
     ~Server();

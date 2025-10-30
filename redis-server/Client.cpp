@@ -4,9 +4,15 @@ namespace kredis
 {
 void Client::handle_read(const asio::error_code &error, std::size_t bytes_transferred)
 {
-    if (m_on_read_done)
+    m_input_message.append(std::string{m_read_buffer.begin(), m_read_buffer.begin() + bytes_transferred});
+    bool status = m_on_read_done(m_input_message, error, bytes_transferred, m_id);
+    if (status)
     {
-        m_on_read_done(m_read_buffer, error, bytes_transferred, m_id);
+        m_input_message.clear();
+    }
+    if (error != asio::error::connection_reset && error != asio::error::eof)
+    {
+        read();
     }
 }
 
@@ -18,9 +24,9 @@ void Client::handle_write(const asio::error_code &error, std::size_t bytes_trans
     }
 }
 
-Client::Client(std::string id, CallbackType on_read, CallbackType on_write)
+Client::Client(std::string id, std::shared_ptr<spdlog::logger> logger, ReadCallbackType on_read, WriteCallbackType on_write)
     : m_work_guard{asio::make_work_guard(m_io_context)}, m_socket{m_io_context},
-    m_on_read_done{std::move(on_read)}, m_on_write_done{std::move(on_write)}, m_id{std::move(id)}
+    m_on_read_done{std::move(on_read)}, m_on_write_done{std::move(on_write)}, m_id{std::move(id)}, m_logger{std::move(logger)}
 {
     m_io_context_thread = std::thread([this]() { m_io_context.run(); });
 }
@@ -39,8 +45,19 @@ Client::~Client()
     m_io_context_thread.join();
     if (m_socket.is_open())
     {
-        m_socket.shutdown(asio::socket_base::shutdown_both);
-        m_socket.close();
+        asio::error_code error;
+        // Attempt shutdown only if the socket is connected
+        m_socket.shutdown(asio::socket_base::shutdown_both, error);
+        if (error)
+        {
+            m_logger->warn("Shutdown failed: {}", error.message());
+        }
+
+        m_socket.close(error);
+        if (error)
+        {
+            m_logger->warn("Close failed: {}", error.message());
+        }
     }
 }
 asio::ip::tcp::socket &Client::get_socket()

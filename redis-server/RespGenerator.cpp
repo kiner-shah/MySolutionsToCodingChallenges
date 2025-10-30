@@ -69,6 +69,7 @@ std::string RespGenerator::generate(const RespType &input) const
 {
     if (std::holds_alternative<RespString>(input))
     {
+        m_logger->debug("Generating a RESP string");
         return generate_resp_string(std::get<RespString>(input));
     }
     else if (std::holds_alternative<RespArray>(input))
@@ -85,6 +86,7 @@ std::string RespGenerator::generate(const RespType &input) const
     }
     else if (std::holds_alternative<RespNull>(input))
     {
+        m_logger->debug("Generating a RESP null");
         return generate_resp_null(std::get<RespNull>(input));
     }
     return std::string{};

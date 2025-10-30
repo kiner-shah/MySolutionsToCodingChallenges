@@ -1,4 +1,5 @@
 #include "CommandProcessor.hpp"
+#include "RespErrors.hpp"
 
 namespace kredis
 {
@@ -42,19 +43,42 @@ bool CommandProcessor::process(RespType command, RespType& response)
         }
     }
 
-    static constexpr const char* invalid_number_arguments = "INVALID_NUMBER_OF_ARGUMENTS";
-    //static constexpr const char* key_not_found = "KEY_NOT_FOUND";
+    // By default set this error
+    response = RespError{invalid_number_arguments};
 
     const auto& command_name = std::get<RespString>(array[0]);
-    if (command_name.m_str == "PING")
+    if (command_name.m_str == "CONFIG")
+    {
+        if (array.size() > 2)
+        {
+            const auto& config_operation = std::get<RespString>(array[1]);
+            if (config_operation.m_str == "GET")
+            {
+                const auto& property = std::get<RespString>(array[2]);
+                if (property.m_str == "appendonly")
+                {
+                    response = RespArray{RespString{"appendonly", true}, {RespString{"no", true}}};
+                }
+                else if (property.m_str == "save")
+                {
+                    response = RespArray{RespString{"save", true}, {RespString{"", true}}};
+                }
+                else
+                {
+                    response = RespError{not_implemented};
+                }
+            }
+            else if (config_operation.m_str == "SET")
+            {
+                response = RespError{not_implemented};
+            }
+        }
+    }
+    else if (command_name.m_str == "PING")
     {
         if (array.size() == 1)
         {
             response = RespString{"PONG", false};
-        }
-        else
-        {
-            response = RespError{invalid_number_arguments};
         }
     }
     else if (command_name.m_str == "ECHO")
@@ -64,9 +88,23 @@ bool CommandProcessor::process(RespType command, RespType& response)
             const auto& message = std::get<RespString>(array[1]);
             response = RespString{message.m_str, false};
         }
-        else
+    }
+    else if (command_name.m_str == "GET")
+    {
+        if (array.size() == 2)
         {
-            response = RespError{invalid_number_arguments};
+            const auto& key = std::get<RespString>(array[1]);
+            response = m_dictionary_manager.get(key.m_str);
+        }
+    }
+    else if (command_name.m_str == "SET")
+    {
+        if (array.size() == 3)
+        {
+            const auto& key = std::get<RespString>(array[1]);
+            const auto& value = std::get<RespString>(array[2]);
+            m_dictionary_manager.set(key.m_str, value);
+            response = RespString{"OK", false};
         }
     }
     else
