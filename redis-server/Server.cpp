@@ -60,9 +60,7 @@ bool Server::on_read_done(const std::string& message, asio::error_code error, st
         auto it = std::find_if(m_clients.begin(), m_clients.end(), find_client);
         if (it != m_clients.end())
         {
-            std::array<unsigned char, 2048> buffer;
-            std::copy(message.begin(), message.end(), buffer.begin());
-            (*it)->write(buffer, message.length());
+            (*it)->write(message);
         }
     };
 
@@ -80,7 +78,7 @@ bool Server::on_read_done(const std::string& message, asio::error_code error, st
         }
         return true;
     }
-    m_logger->info("Received message [Length={}] from [ClientId {}]:\n{}", message.length(), client_id, message);
+    // m_logger->info("Received message [Length={}] from [ClientId {}]:\n{}", message.length(), client_id, message);
 
     // Parse the message
     std::vector<RespParserResult> parse_results;
@@ -94,7 +92,7 @@ bool Server::on_read_done(const std::string& message, asio::error_code error, st
         return true;
     }
 
-    RespType response_value;
+    std::shared_ptr<RespType> response_value;
     std::string response_message{};
     for (const auto& parse_result : parse_results)
     {
@@ -123,7 +121,7 @@ bool Server::on_read_done(const std::string& message, asio::error_code error, st
                 }
                 else
                 {
-                    response_message += m_resp_generator.generate(response_value);
+                    response_message += m_resp_generator.generate(std::move(response_value));
                 }
             }
         }
@@ -140,8 +138,7 @@ void Server::on_write_done(const std::array<unsigned char, 2048>& write_data, as
     {
         m_logger->warn("Error occured during write: {}", error.message());
     }
-    m_logger->debug("Sent message [Length={}] to [ClientId {}]:\n{}", bytes_transferred, client_id, std::string{write_data.begin(), write_data.begin() + bytes_transferred});
-    //remove_client(client_id);
+    // m_logger->debug("Sent message [Length={}] to [ClientId {}]:\n{}", bytes_transferred, client_id, std::string{write_data.begin(), write_data.begin() + bytes_transferred});
 }
 
 Server::Server()
