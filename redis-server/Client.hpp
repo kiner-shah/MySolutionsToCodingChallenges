@@ -39,6 +39,6 @@ public:
     asio::ip::tcp::socket& get_socket();
     std::string get_id() const;
     void read();
-    void write(const std::array<unsigned char, 2048>& payload, std::size_t length);
+    void write(const std::string& payload);
 };
 }   // namespace kredis

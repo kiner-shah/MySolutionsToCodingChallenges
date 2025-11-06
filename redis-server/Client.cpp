@@ -4,7 +4,7 @@ namespace kredis
 {
 void Client::handle_read(const asio::error_code &error, std::size_t bytes_transferred)
 {
-    m_input_message.append(std::string{m_read_buffer.begin(), m_read_buffer.begin() + bytes_transferred});
+    m_input_message.append(m_read_buffer.begin(), m_read_buffer.begin() + bytes_transferred);
     bool status = m_on_read_done(m_input_message, error, bytes_transferred, m_id);
     if (status)
     {
@@ -75,11 +75,11 @@ void Client::read()
     m_socket.async_read_some(asio::buffer(m_read_buffer), std::bind(&Client::handle_read, this, std::placeholders::_1, std::placeholders::_2));
 }
 
-void Client::write(const std::array<unsigned char, 2048> &payload, std::size_t length)
+void Client::write(const std::string& payload)
 {
     std::copy(payload.begin(), payload.end(), m_write_buffer.begin());
     m_socket.async_write_some(
-        asio::buffer(m_write_buffer, length),
+        asio::buffer(m_write_buffer, payload.size()),
         std::bind(&Client::handle_write, this, std::placeholders::_1, std::placeholders::_2)
     );
 }

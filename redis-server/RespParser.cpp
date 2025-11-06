@@ -1,5 +1,6 @@
 #include "RespParser.hpp"
 #include <cctype>
+#include <charconv>
 
 namespace kredis
 {
@@ -7,7 +8,7 @@ RespParserState RespParser::parse_simple_string(std::string_view input, RespStri
 {
     if (input.empty() || !input.starts_with('+'))
     {
-        m_logger->error("Simple string: input is either empty or doesn't start with '+': {}", input);
+        //m_logger->error("Simple string: input is either empty or doesn't start with '+': {}", input);
         return RespParserState::Invalid;
     }
     parse_end_pos = 1;
@@ -15,7 +16,7 @@ RespParserState RespParser::parse_simple_string(std::string_view input, RespStri
     auto content_end_pos = input.find("\r\n");
     if (content_end_pos == std::string_view::npos)
     {
-        m_logger->error("Simple string: no CRLF found in input {}", input);
+        //m_logger->error("Simple string: no CRLF found in input {}", input);
         return RespParserState::Incomplete;
     }
     parse_end_pos = content_end_pos + 2;
@@ -26,7 +27,7 @@ RespParserState RespParser::parse_simple_string(std::string_view input, RespStri
     {
         if (c == '\r' || c == '\n')
         {
-            m_logger->error("Simple string: invalid character {} found in input {}", static_cast<int>(c), input);
+            //m_logger->error("Simple string: invalid character {} found in input {}", static_cast<int>(c), input);
             return RespParserState::Invalid;
         }
     }
@@ -39,7 +40,7 @@ RespParserState RespParser::parse_bulk_string(std::string_view input, RespString
 {
     if (input.empty() || !input.starts_with('$'))
     {
-        m_logger->error("Bulk string: input is either empty or doesn't start with '$': {}", input);
+        //m_logger->error("Bulk string: input is either empty or doesn't start with '$': {}", input);
         return RespParserState::Invalid;
     }
     parse_end_pos = 1;
@@ -47,34 +48,39 @@ RespParserState RespParser::parse_bulk_string(std::string_view input, RespString
     auto length_string_end_pos = input.find("\r\n");
     if (length_string_end_pos == std::string_view::npos)
     {
-        m_logger->error("Bulk string: no CRLF found in input {}", input);
+        //m_logger->error("Bulk string: no CRLF found in input {}", input);
         return RespParserState::Incomplete;
     }
     parse_end_pos = length_string_end_pos + 2;
 
     auto length_string_len = length_string_end_pos - 1;
     auto length_string = input.substr(1, length_string_len);
-    for (unsigned char c : length_string)
+    if (length_string.empty())
     {
-        if (!std::isdigit(c))
-        {
-            m_logger->error("Bulk string: invalid length string {} found in input {}", length_string, input);
-            return RespParserState::Invalid;
-        }
+        //m_logger->error("Bulk string: length string is empty in input {}", input);
+        return RespParserState::Invalid;
     }
+    unsigned long long expected_content_len{0};
+
+    auto convert_result = std::from_chars(length_string.data(), length_string.data() + length_string.size(), expected_content_len);
+    if (convert_result.ec != std::errc{})
+    {
+        //m_logger->error("Bulk string: invalid length string {} found in input {}", length_string, input);
+        return RespParserState::Invalid;
+    }
+
     auto content_end_pos = input.find("\r\n", length_string_end_pos + 2);
     if (content_end_pos == std::string_view::npos)
     {
-        m_logger->error("Bulk string: no CRLF found in input after length string {}", input);
+        //m_logger->error("Bulk string: no CRLF found in input after length string {}", input);
         return RespParserState::Incomplete;
     }
     parse_end_pos = content_end_pos + 2;
 
     auto content_len = content_end_pos - length_string_end_pos - 2;
-    auto expected_content_len = std::stoull(std::string{length_string});
     if (content_len != expected_content_len)
     {
-        m_logger->error("Bulk string: expected content length {} but got {}", expected_content_len, content_len);
+        //m_logger->error("Bulk string: expected content length {} but got {}", expected_content_len, content_len);
         return RespParserState::Invalid;
     }
     auto content = input.substr(length_string_end_pos + 2, content_len);
@@ -87,7 +93,7 @@ RespParserState RespParser::parse_error(std::string_view input, RespError& parse
 {
     if (input.empty() || !input.starts_with('-'))
     {
-        m_logger->error("Error: input is either empty or doesn't start with '-': {}", input);
+        //m_logger->error("Error: input is either empty or doesn't start with '-': {}", input);
         return RespParserState::Invalid;
     }
     parse_end_pos = 1;
@@ -95,7 +101,7 @@ RespParserState RespParser::parse_error(std::string_view input, RespError& parse
     auto content_end_pos = input.find("\r\n");
     if (content_end_pos == std::string_view::npos)
     {
-        m_logger->error("Error: no CRLF found in input {}", input);
+        //m_logger->error("Error: no CRLF found in input {}", input);
         return RespParserState::Incomplete;
     }
     parse_end_pos = content_end_pos + 2;
@@ -106,7 +112,7 @@ RespParserState RespParser::parse_error(std::string_view input, RespError& parse
     {
         if (c == '\r' || c == '\n')
         {
-            m_logger->error("Error: invalid character {} found in input {}", static_cast<int>(c), input);
+            //m_logger->error("Error: invalid character {} found in input {}", static_cast<int>(c), input);
             return RespParserState::Invalid;
         }
     }
@@ -118,7 +124,7 @@ RespParserState RespParser::parse_integer(std::string_view input, RespInt& parse
 {
     if (input.empty() || !input.starts_with(':'))
     {
-        m_logger->error("Integer: input is either empty or doesn't start with ':': {}", input);
+        //m_logger->error("Integer: input is either empty or doesn't start with ':': {}", input);
         return RespParserState::Invalid;
     }
     parse_end_pos = 1;
@@ -126,7 +132,7 @@ RespParserState RespParser::parse_integer(std::string_view input, RespInt& parse
     auto content_end_pos = input.find("\r\n");
     if (content_end_pos == std::string_view::npos)
     {
-        m_logger->error("Integer: no CRLF found in input {}", input);
+        //m_logger->error("Integer: no CRLF found in input {}", input);
         return RespParserState::Incomplete;
     }
     parse_end_pos = content_end_pos + 2;
@@ -135,41 +141,15 @@ RespParserState RespParser::parse_integer(std::string_view input, RespInt& parse
     auto content = input.substr(1, content_length);
     if (content.empty())
     {
-        m_logger->error("Integer: content is empty");
+        //m_logger->error("Integer: content is empty");
         return RespParserState::Invalid;
     }
 
-    // Check if first character is - or + or digit
-    bool is_positive = true;
-    std::string integer_str{};
-    if (content[0] == '-' || content[0] == '+')
+    parse_output = 0;
+    if (std::from_chars(content.data(), content.data() + content.size(), parse_output).ec != std::errc{})
     {
-        is_positive = content[0] == '+';
-    }
-    else if (std::isdigit(content[0]))
-    {
-        integer_str += content[0];
-    }
-    else
-    {
-        m_logger->error("Integer: unexpected first character {} found in input {}", content[0], input);
+        //m_logger->error("Integer: failed to parse integer from input {}", input);
         return RespParserState::Invalid;
-    }
-
-    // Check rest of the content string
-    for (std::size_t i = 1; i < content.length(); i++)
-    {
-        if (!std::isdigit(content[i]))
-        {
-            m_logger->error("Integer: invalid character {} found in input {}", static_cast<int>(content[i]), input);
-            return RespParserState::Invalid;
-        }
-        integer_str += content[i];
-    }
-    parse_output = std::stoll(integer_str);
-    if (!is_positive)
-    {
-        parse_output *= -1;
     }
     return RespParserState::Complete;
 }
@@ -178,7 +158,7 @@ RespParserState RespParser::parse_array(std::string_view input, RespArray& parse
 {
     if (input.empty() || !input.starts_with('*'))
     {
-        m_logger->error("Array: input is either empty or doesn't start with '*': {}", input);
+        //m_logger->error("Array: input is either empty or doesn't start with '*': {}", input);
         return RespParserState::Invalid;
     }
     parse_end_pos = 1;
@@ -186,7 +166,7 @@ RespParserState RespParser::parse_array(std::string_view input, RespArray& parse
     auto length_string_end_pos = input.find("\r\n");
     if (length_string_end_pos == std::string_view::npos)
     {
-        m_logger->error("Array: no CRLF found in input {}", input);
+        //m_logger->error("Array: no CRLF found in input {}", input);
         return RespParserState::Incomplete;
     }
     parse_end_pos = length_string_end_pos + 2;
@@ -195,18 +175,16 @@ RespParserState RespParser::parse_array(std::string_view input, RespArray& parse
     auto length_string = input.substr(1, length_string_len);
     if (length_string.empty())
     {
-        m_logger->error("Array: length string is empty in input {}", input);
+        //m_logger->error("Array: length string is empty in input {}", input);
         return RespParserState::Invalid;
     }
-    for (unsigned char c : length_string)
+    std::size_t array_len{0};
+    if (std::from_chars(length_string.data(), length_string.data() + length_string.size(), array_len).ec != std::errc{})
     {
-        if (!std::isdigit(c))
-        {
-            m_logger->error("Array: invalid character {} found in input {}", static_cast<int>(c), input);
-            return RespParserState::Invalid;
-        }
+        //m_logger->error("Array: failed to parse array length from input {}", input);
+        return RespParserState::Invalid;
     }
-    auto array_len = std::stoll(std::string{length_string});
+
     auto counter = array_len;
     auto start_pos = length_string_end_pos + 2;
     std::size_t last_end_pos{};
@@ -277,7 +255,7 @@ RespParserState RespParser::parse_array(std::string_view input, RespArray& parse
             }
             default:
             {
-                m_logger->error("Array: invalid element type {} in input {}", input[start_pos], input);
+                //m_logger->error("Array: invalid element type {} in input {}", input[start_pos], input);
                 state = RespParserState::Invalid;
                 break;
             }
@@ -294,7 +272,7 @@ RespParserState RespParser::parse_array(std::string_view input, RespArray& parse
     }
     if (counter != 0)
     {
-        m_logger->error("Array: input ended unexpectedly, {} elements remaining", counter);
+        //m_logger->error("Array: input ended unexpectedly, {} elements remaining", counter);
         return RespParserState::Incomplete;
     }
     return RespParserState::Complete;
@@ -334,25 +312,23 @@ RespParserState RespParser::parse_null(std::string_view input, RespNull& parse_o
 
     if (input.empty())
     {
-        m_logger->error("Null: input is empty", input);
+        //m_logger->error("Null: input is empty", input);
         return RespParserState::Invalid;
     }
     parse_end_pos = 0;
 
-    m_logger->debug("Null: checking different variants");
+    //m_logger->debug("Null: checking different variants");
     auto state = check_null_variant(input, null_variant1, parse_end_pos);
     if (state == RespParserState::Invalid)
     {
-        m_logger->trace("Null: match with null variant1 failed, trying with null variant2");
         state = check_null_variant(input, null_variant2, parse_end_pos);
         if (state == RespParserState::Invalid)
         {
-            m_logger->trace("Null: match with null variant2 failed, trying with null variant3");
             state = check_null_variant(input, null_variant3, parse_end_pos);
-            if (state == RespParserState::Invalid)
-            {
-                m_logger->trace("Null: match with null variant3 failed, input is invalid: {}", input);
-            }
+            // if (state == RespParserState::Invalid)
+            // {
+            //     m_logger->trace("Null: match with null variant3 failed, input is invalid: {}", input);
+            // }
         }
     }
 
@@ -443,7 +419,7 @@ bool RespParser::parse(std::string_view input, std::vector<RespParserResult> &re
                 break;
             }
             default:
-                m_logger->error("Invalid first character {} in input {}", input[0], input);
+                //m_logger->error("Invalid first character {} in input {}", input[0], input);
                 result.emplace_back(std::nullopt, RespParserState::Invalid);
                 return false;
         }
@@ -458,7 +434,7 @@ bool RespParser::parse(std::string_view input, std::vector<RespParserResult> &re
         parse_start_pos = parse_start_pos + parse_end_pos;
         input = original_input.substr(parse_start_pos);
     }
-    m_logger->debug("Parse completed, parse ended at position {}, input size {}", parse_end_pos, original_input.size());
+    //m_logger->debug("Parse completed, parse ended at position {}, input size {}", parse_end_pos, original_input.size());
     return true;
 }
 

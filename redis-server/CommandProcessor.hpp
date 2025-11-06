@@ -12,7 +12,9 @@ class CommandProcessor
     std::shared_ptr<spdlog::logger> m_logger;
     DictionaryManager m_dictionary_manager;
 public:
+    using RespTypePtr = std::shared_ptr<RespType>;
+
     CommandProcessor(std::shared_ptr<spdlog::logger> logger);
-    bool process(RespType command, RespType& response);
+    bool process(const RespType& command, RespTypePtr& response);
 };
 }   // namespace kredis
