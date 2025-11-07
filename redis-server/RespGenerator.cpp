@@ -80,7 +80,7 @@ std::string RespGenerator::generate_resp_array(const RespArray &input) const
     std::string result;
     result.reserve(calculate_resp_array_size(input));
 
-    result = fmt::format("*{}\r\n", input.size());
+    result += fmt::format("*{}\r\n", input.size());
     for (const auto& element : input)
     {
         if (std::holds_alternative<RespString>(element))

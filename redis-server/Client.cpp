@@ -24,11 +24,10 @@ void Client::handle_write(const asio::error_code &error, std::size_t bytes_trans
     }
 }
 
-Client::Client(std::string id, std::shared_ptr<spdlog::logger> logger, ReadCallbackType on_read, WriteCallbackType on_write)
-    : m_work_guard{asio::make_work_guard(m_io_context)}, m_socket{m_io_context},
+Client::Client(std::string id, asio::io_context& io_context, std::shared_ptr<spdlog::logger> logger, ReadCallbackType on_read, WriteCallbackType on_write)
+    : m_socket{io_context},
     m_on_read_done{std::move(on_read)}, m_on_write_done{std::move(on_write)}, m_id{std::move(id)}, m_logger{std::move(logger)}
 {
-    m_io_context_thread = std::thread([this]() { m_io_context.run(); });
 }
 
 Client::~Client()
@@ -36,15 +35,7 @@ Client::~Client()
     if (m_socket.is_open())
     {
         m_socket.cancel();
-    }
-    m_work_guard.reset();
-    while (!m_io_context.stopped())
-    {
-        m_io_context.stop();
-    }
-    m_io_context_thread.join();
-    if (m_socket.is_open())
-    {
+
         asio::error_code error;
         // Attempt shutdown only if the socket is connected
         m_socket.shutdown(asio::socket_base::shutdown_both, error);
@@ -72,7 +63,13 @@ std::string Client::get_id() const
 
 void Client::read()
 {
-    m_socket.async_read_some(asio::buffer(m_read_buffer), std::bind(&Client::handle_read, this, std::placeholders::_1, std::placeholders::_2));
+    m_socket.async_read_some(
+        asio::buffer(m_read_buffer),
+        [self = shared_from_this()](const asio::error_code& error, std::size_t bytes_transferred)
+        {
+            self->handle_read(error, bytes_transferred);
+        }
+    );
 }
 
 void Client::write(const std::string& payload)
@@ -80,7 +77,10 @@ void Client::write(const std::string& payload)
     std::copy(payload.begin(), payload.end(), m_write_buffer.begin());
     m_socket.async_write_some(
         asio::buffer(m_write_buffer, payload.size()),
-        std::bind(&Client::handle_write, this, std::placeholders::_1, std::placeholders::_2)
+        [self = shared_from_this()](const asio::error_code& error, std::size_t bytes_transferred)
+        {
+            self->handle_write(error, bytes_transferred);
+        }
     );
 }
 }
