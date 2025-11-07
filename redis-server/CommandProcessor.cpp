@@ -3,6 +3,12 @@
 
 namespace kredis
 {
+
+const CommandProcessor::RespTypePtr CommandProcessor::OK_RESPONSE = std::make_shared<RespType>(RespString{"OK", false});
+const CommandProcessor::RespTypePtr CommandProcessor::PONG_RESPONSE = std::make_shared<RespType>(RespString{"PONG", false});
+const CommandProcessor::RespTypePtr CommandProcessor::NOT_IMPLEMENTED_RESPONSE = std::make_shared<RespType>(RespError{not_implemented});
+const CommandProcessor::RespTypePtr CommandProcessor::INVALID_NUMBER_ARGS_RESPONSE = std::make_shared<RespType>(RespError{invalid_number_arguments});
+
 CommandProcessor::CommandProcessor(std::shared_ptr<spdlog::logger> logger)
     : m_logger{std::move(logger)}
 {
@@ -44,7 +50,7 @@ bool CommandProcessor::process(const RespType& command, RespTypePtr& response)
     }
 
     // By default set this error
-    response = std::make_shared<RespType>(RespError{invalid_number_arguments});
+    response = INVALID_NUMBER_ARGS_RESPONSE;
 
     const auto& command_name = std::get<RespString>(array[0]);
     if (command_name.m_str == "CONFIG")
@@ -65,12 +71,12 @@ bool CommandProcessor::process(const RespType& command, RespTypePtr& response)
                 }
                 else
                 {
-                    response = std::make_shared<RespType>(RespError{not_implemented});
+                    response = NOT_IMPLEMENTED_RESPONSE;
                 }
             }
             else if (config_operation.m_str == "SET")
             {
-                response = std::make_shared<RespType>(RespError{not_implemented});
+                response = NOT_IMPLEMENTED_RESPONSE;
             }
         }
     }
@@ -78,7 +84,7 @@ bool CommandProcessor::process(const RespType& command, RespTypePtr& response)
     {
         if (array.size() == 1)
         {
-            response = std::make_shared<RespType>(RespString{"PONG", false});
+            response = CommandProcessor::PONG_RESPONSE;
         }
     }
     else if (command_name.m_str == "ECHO")
@@ -105,7 +111,7 @@ bool CommandProcessor::process(const RespType& command, RespTypePtr& response)
             const auto& value = std::get<RespString>(array[2]);
             auto value_ptr = std::make_shared<RespType>(value);
             m_dictionary_manager.set(key.m_str, std::move(value_ptr));
-            response = std::make_shared<RespType>(RespString{"OK", false});
+            response = CommandProcessor::OK_RESPONSE;
         }
     }
     else

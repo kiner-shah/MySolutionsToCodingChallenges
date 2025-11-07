@@ -10,6 +10,7 @@ add_executable(KRedisServer
     RespParser.cpp
     CommandProcessor.cpp
     Client.cpp
+    ClientManager.cpp
     Server.cpp
     redis_server.cpp)
 add_executable(RedisParserTest
