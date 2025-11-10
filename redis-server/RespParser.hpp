@@ -23,6 +23,8 @@ struct RespParserResult
 {
     std::optional<RespType> m_type;
     RespParserState m_state;
+    std::size_t m_parse_start_pos;
+    std::size_t m_parse_end_pos;
 };
 
 class RespParser
