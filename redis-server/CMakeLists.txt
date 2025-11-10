@@ -9,6 +9,7 @@ add_executable(KRedisServer
     RespGenerator.cpp
     RespParser.cpp
     CommandProcessor.cpp
+    TcpBuffer.cpp
     Client.cpp
     ClientManager.cpp
     Server.cpp

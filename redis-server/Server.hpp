@@ -21,8 +21,6 @@ namespace kredis
 {
 class Server
 {
-    using ClientPtr = std::unique_ptr<Client>;
-
     asio::io_context m_io_context;
     asio::signal_set m_signals;
     asio::ip::tcp::acceptor m_acceptor;
@@ -36,8 +34,8 @@ class Server
 
     void write_to_client(std::string message, const std::string& client_id);
     void handle_accept(const asio::error_code& error, std::string client_id);
-    bool on_read_done(const std::string&, asio::error_code, std::size_t, const std::string&);
-    void on_write_done(const std::array<unsigned char, 2048>&, asio::error_code, std::size_t, const std::string&);
+    std::tuple<bool, std::size_t> on_read_done(std::string_view, asio::error_code, std::size_t, const std::string&);
+
 public:
     Server();
     ~Server();

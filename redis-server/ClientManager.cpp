@@ -31,9 +31,8 @@ ClientManager::~ClientManager()
     }
 }
 
-ClientManager::ClientPtr ClientManager::create_new_client(
-    ReadCallbackType on_read,
-    WriteCallbackType on_write)
+ClientPtr ClientManager::create_new_client(
+    ReadCallbackType on_read)
 {
     std::unique_lock<std::shared_mutex> lock{m_clients_mutex};
     std::string new_user_client_id = "Client_" + std::to_string(m_client_counter);
@@ -42,14 +41,13 @@ ClientManager::ClientPtr ClientManager::create_new_client(
         new_user_client_id,
         m_io_context,
         m_logger,
-        std::move(on_read),
-        std::move(on_write)
+        std::move(on_read)
     );
     auto result = m_clients.insert({new_user_client_id, std::move(client)});
     return result.first->second;
 }
 
-ClientManager::ClientPtr ClientManager::get_client(const std::string& id)
+ClientPtr ClientManager::get_client(const std::string& id)
 {
     std::shared_lock<std::shared_mutex> lock{m_clients_mutex};
     auto it = m_clients.find(id);

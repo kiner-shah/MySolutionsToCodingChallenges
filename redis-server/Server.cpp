@@ -45,7 +45,7 @@ void Server::handle_accept(const asio::error_code& error, std::string client_id)
     }
 }
 
-bool Server::on_read_done(const std::string& message, asio::error_code error, std::size_t bytes_transferred, const std::string& client_id)
+std::tuple<bool, std::size_t> Server::on_read_done(std::string_view message, asio::error_code error, std::size_t bytes_transferred, const std::string& client_id)
 {
     if (error)
     {
@@ -59,7 +59,7 @@ bool Server::on_read_done(const std::string& message, asio::error_code error, st
         {
             m_logger->warn("Error occured during read: {}", error.message());
         }
-        return true;
+        return std::make_tuple(true, bytes_transferred);
     }
     // m_logger->info("Received message [Length={}] from [ClientId {}]:\n{}", message.length(), client_id, message);
 
@@ -68,29 +68,34 @@ bool Server::on_read_done(const std::string& message, asio::error_code error, st
     if (!m_resp_parser.parse(message, parse_results))
     {
         m_logger->error("Failed to parse message from [ClientId {}]: {}", client_id, message);
-        // Send error response (RespError)
+        // Send error response
         RespError error{invalid_input_format};
         std::string error_response = m_resp_generator.generate(error);
         write_to_client(std::move(error_response), client_id);
-        return true;
+        return std::make_tuple(true, parse_results.empty() ? 0 : 1);
     }
 
     std::shared_ptr<RespType> response_value;
     std::string response_message{};
+    bool wait_for_next_read = false;
+    std::size_t last_processed_index = 0;
     for (const auto& parse_result : parse_results)
     {
+        //m_logger->debug("ParseResult: {} {} {}", static_cast<int>(parse_result.m_state), parse_result.m_parse_start_pos, parse_result.m_parse_end_pos);
         RespError error{invalid_input_format};
         if (parse_result.m_state == RespParserState::Invalid)
         {
+            last_processed_index = parse_result.m_parse_end_pos;
             response_message += m_resp_generator.generate(error);
         }
         else if (parse_result.m_state == RespParserState::Incomplete)
         {
-            // return from this function, and wait for next read
-            return false;
+            wait_for_next_read = true;
+            break;
         }
         else if (parse_result.m_state == RespParserState::Complete)
         {
+            last_processed_index = parse_result.m_parse_end_pos;
             if (!parse_result.m_type.has_value())
             {
                 response_message = m_resp_generator.generate(RespError{internal_error});
@@ -111,17 +116,11 @@ bool Server::on_read_done(const std::string& message, asio::error_code error, st
     }
 
     // Write back the response to client
-    write_to_client(std::move(response_message), client_id);
-    return true;
-}
-
-void Server::on_write_done(const std::array<unsigned char, 2048>& write_data, asio::error_code error, std::size_t bytes_transferred, const std::string& client_id)
-{
-    if (error)
+    if (!response_message.empty())
     {
-        m_logger->warn("Error occured during write: {}", error.message());
+        write_to_client(std::move(response_message), client_id);
     }
-    // m_logger->debug("Sent message [Length={}] to [ClientId {}]:\n{}", bytes_transferred, client_id, std::string{write_data.begin(), write_data.begin() + bytes_transferred});
+    return std::make_tuple(!wait_for_next_read, last_processed_index);
 }
 
 Server::Server()
@@ -133,7 +132,7 @@ Server::Server()
     m_resp_generator{m_logger},
     m_command_processor{m_logger}
 {
-    m_logger->set_level(spdlog::level::warn);
+    m_logger->set_level(spdlog::level::err);
     m_logger->set_pattern("%Y-%m-%d %H:%M:%S | %n | %-8l | %v");
 
     m_signals.add(SIGINT);
@@ -176,8 +175,7 @@ void Server::stop()
 void Server::accept()
 {
     auto client_ptr = m_client_manager.create_new_client(
-        std::bind(&Server::on_read_done, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4),
-        std::bind(&Server::on_write_done, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4)
+        std::bind(&Server::on_read_done, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4)
     );
     m_acceptor.async_accept(client_ptr->get_socket(),
         [this, client_ptr](const asio::error_code &error)
