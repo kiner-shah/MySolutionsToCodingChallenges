@@ -1,17 +1,23 @@
 #include "CommandProcessor.hpp"
 #include "RespErrors.hpp"
+#include "utils.hpp"
+#include <charconv>
+#include <chrono>
 
 namespace kredis
 {
-
-const CommandProcessor::RespTypePtr CommandProcessor::OK_RESPONSE = std::make_shared<RespType>(RespString{"OK", false});
-const CommandProcessor::RespTypePtr CommandProcessor::PONG_RESPONSE = std::make_shared<RespType>(RespString{"PONG", false});
-const CommandProcessor::RespTypePtr CommandProcessor::NOT_IMPLEMENTED_RESPONSE = std::make_shared<RespType>(RespError{not_implemented});
-const CommandProcessor::RespTypePtr CommandProcessor::INVALID_NUMBER_ARGS_RESPONSE = std::make_shared<RespType>(RespError{invalid_number_arguments});
+const RespTypePtr CommandProcessor::OK_RESPONSE = std::make_shared<RespType>(RespString{"OK", false});
+const RespTypePtr CommandProcessor::NOT_IMPLEMENTED_RESPONSE = std::make_shared<RespType>(RespError{not_implemented});
+const RespTypePtr CommandProcessor::PONG_RESPONSE = std::make_shared<RespType>(RespString{"PONG", false});
+const RespTypePtr CommandProcessor::INVALID_NUMBER_ARGS_RESPONSE = std::make_shared<RespType>(RespError{invalid_number_arguments});
+const RespTypePtr CommandProcessor::INVALID_EXPIRY_VALUE_RESPONSE = std::make_shared<RespType>(RespError{invalid_expiry_value});
+const std::uint64_t CommandProcessor::EXPIRY_CHECKING_PERIOD_SECONDS = 10;
 
 CommandProcessor::CommandProcessor(std::shared_ptr<spdlog::logger> logger)
-    : m_logger{std::move(logger)}
+    : m_logger{std::move(logger)},
+    m_dictionary_manager{std::make_shared<DictionaryManager>(EXPIRY_CHECKING_PERIOD_SECONDS)}
 {
+    m_dictionary_manager->start();
 }
 
 bool CommandProcessor::process(const RespType& command, RespTypePtr& response)
@@ -100,17 +106,69 @@ bool CommandProcessor::process(const RespType& command, RespTypePtr& response)
         if (array.size() == 2)
         {
             const auto& key = std::get<RespString>(array[1]);
-            response = m_dictionary_manager.get(key.m_str);
+            response = m_dictionary_manager->get(key.m_str);
         }
     }
     else if (command_name.m_str == "SET")
     {
-        if (array.size() == 3)
+        if (array.size() >= 3)
         {
             const auto& key = std::get<RespString>(array[1]);
             const auto& value = std::get<RespString>(array[2]);
             auto value_ptr = std::make_shared<RespType>(value);
-            m_dictionary_manager.set(key.m_str, std::move(value_ptr));
+
+            std::optional<std::uint64_t> timestamp = std::nullopt;
+            if (array.size() > 3)
+            {
+                const auto& option_name = std::get<RespString>(array[3]);
+                const auto& option_value = std::get<RespString>(array[4]);
+                std::uint64_t option_value_int = 0;
+
+                if (std::from_chars(
+                        option_value.m_str.data(),
+                        option_value.m_str.data() + option_value.m_str.size(),
+                        option_value_int
+                    ).ec != std::errc{})
+                {
+                    response = INVALID_EXPIRY_VALUE_RESPONSE;
+                    return true;
+                }
+
+                if (option_name.m_str == "EX")
+                {
+                    // Expire after N seconds
+                    timestamp = get_current_time<std::chrono::milliseconds>() + option_value_int * 1000;
+                }
+                else if (option_name.m_str == "PX")
+                {
+                    // Expire after N milliseconds
+                    timestamp = get_current_time<std::chrono::milliseconds>() + option_value_int;
+                }
+                else if (option_name.m_str == "EXAT")
+                {
+                    // Expire at timestamp in seconds
+                    timestamp = get_current_time();
+                    if (option_value_int <= timestamp)
+                    {
+                        response = INVALID_EXPIRY_VALUE_RESPONSE;
+                        return true;
+                    }
+                    timestamp = option_value_int * 1000;
+                }
+                else if (option_name.m_str == "PXAT")
+                {
+                    // Expire at timestamp in milliseconds
+                    timestamp = get_current_time<std::chrono::milliseconds>();
+                    if (option_value_int <= timestamp)
+                    {
+                        response = INVALID_EXPIRY_VALUE_RESPONSE;
+                        return true;
+                    }
+                    timestamp = option_value_int;
+                }
+            }
+
+            m_dictionary_manager->set(key.m_str, std::move(value_ptr), timestamp);
             response = CommandProcessor::OK_RESPONSE;
         }
     }

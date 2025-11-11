@@ -7,4 +7,6 @@ static constexpr const char* invalid_number_arguments = "INVALID_NUMBER_OF_ARGUM
 static constexpr const char* key_not_found = "KEY_NOT_FOUND";
 static constexpr const char* not_implemented = "NOT_IMPLEMENTED";
 static constexpr const char* internal_error = "INTERNAL_ERROR";
+static constexpr const char* invalid_operation = "INVALID_OPERATION";
+static constexpr const char* invalid_expiry_value = "INVALID_EXPIRY_VALUE";
 }   // namespace kredis
