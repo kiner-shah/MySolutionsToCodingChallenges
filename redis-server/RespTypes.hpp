@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 #include <ostream>
+#include <memory>
 
 namespace kredis
 {
@@ -30,4 +31,6 @@ struct RespType : std::variant<RespString, RespInt, RespError, RespArray, RespNu
 {
     using variant::variant;
 };
+
+using RespTypePtr = std::shared_ptr<RespType>;
 }   // namespace kredis
