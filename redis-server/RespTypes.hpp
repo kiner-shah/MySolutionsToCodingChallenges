@@ -2,7 +2,7 @@
 
 #include <variant>
 #include <string>
-#include <vector>
+#include <deque>
 #include <ostream>
 #include <memory>
 
@@ -24,7 +24,7 @@ using RespNull = std::nullptr_t;
 struct RespType;
 
 // Now RespArray can contain any RespType, enabling full nesting
-using RespArray = std::vector<RespType>;
+using RespArray = std::deque<RespType>;
 
 // Define the main variant type that includes all RESP types
 struct RespType : std::variant<RespString, RespInt, RespError, RespArray, RespNull>

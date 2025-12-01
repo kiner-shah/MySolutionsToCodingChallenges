@@ -41,6 +41,9 @@ public:
     void start();
     void set(const std::string& key, RespTypePtr value, std::optional<std::uint64_t> timestamp = std::nullopt);
     RespTypePtr get(const std::string& key);
-    void remove(const std::string& key);
+    RespTypePtr increment(const std::string& key);
+    RespTypePtr decrement(const std::string& key);
+    bool exists(const std::string& key);
+    std::size_t remove(const std::string& key);
 };
 }   // namespace kredis

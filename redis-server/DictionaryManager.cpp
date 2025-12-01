@@ -78,6 +78,10 @@ void DictionaryManager::stop()
 
 bool DictionaryManager::has_expired(const DictionaryValue& value) const
 {
+    if (!value.m_expiry_timestamp.has_value())
+    {
+        return false;
+    }
     auto current_timestamp = get_current_time<std::chrono::milliseconds>();
     return current_timestamp > value.m_expiry_timestamp;
 }
@@ -130,12 +134,92 @@ RespTypePtr DictionaryManager::get(const std::string &key)
         });
         return std::make_shared<RespType>(RespNull{});
     }
+    if (!std::holds_alternative<RespString>(*it->second.m_value))
+    {
+        return std::make_shared<RespType>(RespError{invalid_operation});
+    }
     return it->second.m_value;
 }
 
-void DictionaryManager::remove(const std::string &key)
+RespTypePtr DictionaryManager::increment(const std::string &key)
+{
+    // If exists and is a number, then increment
+    // If not exists or expired, then set to 1
+    std::shared_lock<std::shared_mutex> read_lock{m_shared_mutex};
+    auto it = m_dictionary.find(key);
+    if (it == m_dictionary.end())
+    {
+        return std::make_shared<RespType>(RespNull{});
+    }
+    m_timer.cancel();
+    if (has_expired(it->second))
+    {
+        read_lock.unlock();
+        auto value_ptr = std::make_shared<RespType>(RespInt{1});
+        set(key, value_ptr);
+        return value_ptr;
+    }
+    if (!std::holds_alternative<RespString>(*it->second.m_value))
+    {
+        return std::make_shared<RespType>(RespError{invalid_operation});
+    }
+    RespString value = std::get<RespString>(*it->second.m_value);
+    auto int_value_opt = is_valid_signed_64_bit_int(value.m_str);
+    if (!int_value_opt.has_value())
+    {
+        return std::make_shared<RespType>(RespError{invalid_operation});
+    }
+    read_lock.unlock();
+    // TODO: check for overflow
+    auto new_value_ptr = std::make_shared<RespType>(RespString{std::to_string(int_value_opt.value() + 1), false});
+    set(key, new_value_ptr, it->second.m_expiry_timestamp);
+    return new_value_ptr;
+}
+
+RespTypePtr DictionaryManager::decrement(const std::string &key)
+{
+    // If exists and is a number, then decrement
+    // If not exists or expired, then set to 1
+    std::shared_lock<std::shared_mutex> read_lock{m_shared_mutex};
+    auto it = m_dictionary.find(key);
+    if (it == m_dictionary.end())
+    {
+        return std::make_shared<RespType>(RespNull{});
+    }
+    m_timer.cancel();
+    if (has_expired(it->second))
+    {
+        read_lock.unlock();
+        auto value_ptr = std::make_shared<RespType>(RespInt{1});
+        set(key, value_ptr);
+        return value_ptr;
+    }
+    if (!std::holds_alternative<RespString>(*it->second.m_value))
+    {
+        return std::make_shared<RespType>(RespError{invalid_operation});
+    }
+    RespString value = std::get<RespString>(*it->second.m_value);
+    auto int_value_opt = is_valid_signed_64_bit_int(value.m_str);
+    if (!int_value_opt.has_value())
+    {
+        return std::make_shared<RespType>(RespError{invalid_operation});
+    }
+    read_lock.unlock();
+    // TODO: check for underflow
+    auto new_value_ptr = std::make_shared<RespType>(RespString{std::to_string(int_value_opt.value() - 1), false});
+    set(key, new_value_ptr, it->second.m_expiry_timestamp);
+    return new_value_ptr;
+}
+
+bool DictionaryManager::exists(const std::string &key)
+{
+    std::shared_lock<std::shared_mutex> lock{m_shared_mutex};
+    return m_dictionary.contains(key);
+}
+
+std::size_t DictionaryManager::remove(const std::string &key)
 {
     std::unique_lock<std::shared_mutex> lock{m_shared_mutex};
-    m_dictionary.erase(key);
+    return m_dictionary.erase(key);
 }
 } // namespace kredis
