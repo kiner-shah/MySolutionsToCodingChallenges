@@ -172,6 +172,52 @@ bool CommandProcessor::process(const RespType& command, RespTypePtr& response)
             response = CommandProcessor::OK_RESPONSE;
         }
     }
+    else if (command_name.m_str == "EXISTS")
+    {
+        if (array.size() >= 2)
+        {
+            std::vector<RespString> keys_to_check{array.size() - 1};
+            RespInt exists_count = 0;
+            for (std::size_t index = 1; index < array.size(); index++)
+            {
+                bool exists = m_dictionary_manager->exists(std::get<RespString>(array[index]).m_str);
+                if (exists)
+                {
+                    exists_count++;
+                }
+            }
+            response = std::make_shared<RespType>(exists_count);
+        }
+    }
+    else if (command_name.m_str == "DEL")
+    {
+        if (array.size() >= 2)
+        {
+            std::vector<RespString> keys_to_delete{array.size() - 1};
+            RespInt remove_count = 0;
+            for (std::size_t index = 1; index < array.size(); index++)
+            {
+                remove_count += m_dictionary_manager->remove(std::get<RespString>(array[index]).m_str);
+            }
+            response = std::make_shared<RespType>(remove_count);
+        }
+    }
+    else if (command_name.m_str == "INCR")
+    {
+        if (array.size() == 2)
+        {
+            const auto& key = std::get<RespString>(array[1]);
+            response = m_dictionary_manager->increment(key.m_str);
+        }
+    }
+    else if (command_name.m_str == "DECR")
+    {
+        if (array.size() == 2)
+        {
+            const auto& key = std::get<RespString>(array[1]);
+            response = m_dictionary_manager->decrement(key.m_str);
+        }
+    }
     else
     {
         //m_logger->warn("Other commands aren't supported yet");
