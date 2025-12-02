@@ -8,44 +8,13 @@ These dependencies should be present in the project root directory.
 - spdlog should be compiled into a library and the install folder should be present in the project root directory
 - asio should be downloaded and extracted in the project root directory
 
-## Scribble
-Integer:
-- Check for ':'
-- Then continue reading digits
-- If non-digit encountered, note that as error
-- If "\r\n" is encountered, note that as success
-- Note the end position of parse
-- If parse failed, retry parsing from end position as the new start position
-
-RedisServer
-- vector<ClientPtr>
-- io_context
-- port
-- executor_work_guard
-- acceptor
-
-- RedisServer(port)
-- start()
-- accept()
-- handle_accept()
-- on_read_done()
-- on_write_done()
-- stop()
-- ~RedisServer()
-
-Client
-- io_context
-- executor_work_guard
-- socket
-- client_id
-- read_buffer
-- write_buffer
-- on_read_complete
-- on_write_complete
-
-- Client()
-- write(data)
-- handle_write()
-- read()
-- handle_read()
-- ~Client()
+Performance of my implementation:
+```
+SET: 75471.70 requests per second
+GET: 79617.83 requests per second
+```
+Performance of Redis official server:
+```
+SET: 117647.05 requests per second
+GET: 127064.80 requests per second
+```

@@ -18,6 +18,7 @@ class CommandProcessor
     static const RespTypePtr INVALID_ARG_FORMAT_RESPONSE;
     static const RespTypePtr INVALID_NUMBER_ARGS_RESPONSE;
     static const RespTypePtr INVALID_EXPIRY_VALUE_RESPONSE;
+    static const RespTypePtr SAVE_FAILED_RESPONSE;
     static const std::uint64_t EXPIRY_CHECKING_PERIOD_SECONDS;
 
 public:

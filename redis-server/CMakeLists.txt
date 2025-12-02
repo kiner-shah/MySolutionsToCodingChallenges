@@ -6,6 +6,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 add_executable(KRedisServer
     utils.cpp
+    RdbManager.cpp
     DictionaryManager.cpp
     RespGenerator.cpp
     RespParser.cpp

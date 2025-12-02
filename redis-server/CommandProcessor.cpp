@@ -10,6 +10,7 @@ const RespTypePtr CommandProcessor::OK_RESPONSE = std::make_shared<RespType>(Res
 const RespTypePtr CommandProcessor::NOT_IMPLEMENTED_RESPONSE = std::make_shared<RespType>(RespError{not_implemented});
 const RespTypePtr CommandProcessor::PONG_RESPONSE = std::make_shared<RespType>(RespString{"PONG", false});
 const RespTypePtr CommandProcessor::INVALID_NUMBER_ARGS_RESPONSE = std::make_shared<RespType>(RespError{invalid_number_arguments});
+const RespTypePtr CommandProcessor::SAVE_FAILED_RESPONSE = std::make_shared<RespType>(RespError{save_failed});
 const RespTypePtr CommandProcessor::INVALID_ARG_FORMAT_RESPONSE = std::make_shared<RespType>(RespError{invalid_argument_format});
 const RespTypePtr CommandProcessor::INVALID_EXPIRY_VALUE_RESPONSE = std::make_shared<RespType>(RespError{invalid_expiry_value});
 const std::uint64_t CommandProcessor::EXPIRY_CHECKING_PERIOD_SECONDS = 10;
@@ -265,6 +266,20 @@ bool CommandProcessor::process(const RespType& command, RespTypePtr& response)
                 return true;
             }
             response = m_dictionary_manager->get_list(key.m_str, start_offset_opt.value(), end_offset_opt.value());
+        }
+    }
+    else if (command_name.m_str == "SAVE")
+    {
+        if (array.size() == 1)
+        {
+            if (m_dictionary_manager->save())
+            {
+                response = CommandProcessor::OK_RESPONSE;
+            }
+            else
+            {
+                response = CommandProcessor::SAVE_FAILED_RESPONSE;
+            }
         }
     }
     else
