@@ -45,5 +45,8 @@ public:
     RespTypePtr decrement(const std::string& key);
     bool exists(const std::string& key);
     std::size_t remove(const std::string& key);
+    RespTypePtr push_front(const std::string& key, const std::vector<RespString>& values);
+    RespTypePtr push_back(const std::string& key, const std::vector<RespString>& values);
+    RespTypePtr get_list(const std::string& key, int start_offset, int end_offset);
 };
 }   // namespace kredis

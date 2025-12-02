@@ -222,4 +222,97 @@ std::size_t DictionaryManager::remove(const std::string &key)
     std::unique_lock<std::shared_mutex> lock{m_shared_mutex};
     return m_dictionary.erase(key);
 }
+
+RespTypePtr DictionaryManager::push_front(const std::string &key, const std::vector<RespString> &values)
+{
+    std::unique_lock<std::shared_mutex> lock{m_shared_mutex};
+    auto it = m_dictionary.find(key);
+    if (it == m_dictionary.end())
+    {
+        RespArray new_list;
+        for (const auto& val : values)
+        {
+            new_list.push_front(val);
+        }
+        m_dictionary[key] = DictionaryValue{ std::make_shared<RespType>(new_list) };
+        return std::make_shared<RespType>(RespInt{ static_cast<RespInt>(values.size()) });
+    }
+    else
+    {
+        if (!std::holds_alternative<RespArray>(*it->second.m_value))
+        {
+            return std::make_shared<RespType>(RespError{invalid_operation});
+        }
+        auto& existing_list = std::get<RespArray>(*it->second.m_value);
+        for (const auto& val : values)
+        {
+            existing_list.push_front(val);
+        }
+        return std::make_shared<RespType>(RespInt{ static_cast<RespInt>(existing_list.size()) });
+    }
+}
+
+RespTypePtr DictionaryManager::push_back(const std::string &key, const std::vector<RespString> &values)
+{
+    std::unique_lock<std::shared_mutex> lock{m_shared_mutex};
+    auto it = m_dictionary.find(key);
+    if (it == m_dictionary.end())
+    {
+        RespArray new_list;
+        for (const auto& val : values)
+        {
+            new_list.push_back(val);
+        }
+        m_dictionary[key] = DictionaryValue{ std::make_shared<RespType>(new_list) };
+        return std::make_shared<RespType>(RespInt{ static_cast<RespInt>(values.size()) });
+    }
+    else
+    {
+        if (!std::holds_alternative<RespArray>(*it->second.m_value))
+        {
+            return std::make_shared<RespType>(RespError{invalid_operation});
+        }
+        auto& existing_list = std::get<RespArray>(*it->second.m_value);
+        for (const auto& val : values)
+        {
+            existing_list.push_back(val);
+        }
+        return std::make_shared<RespType>(RespInt{ static_cast<RespInt>(existing_list.size()) });
+    }
+}
+RespTypePtr DictionaryManager::get_list(const std::string &key, int start_offset, int end_offset)
+{
+    std::shared_lock<std::shared_mutex> lock{m_shared_mutex};
+    auto it = m_dictionary.find(key);
+    if (it == m_dictionary.end())
+    {
+        return std::make_shared<RespType>(RespArray{});
+    }
+    if (!std::holds_alternative<RespArray>(*it->second.m_value))
+    {
+        return std::make_shared<RespType>(RespError{invalid_operation});
+    }
+    const auto& existing_list = std::get<RespArray>(*it->second.m_value);
+    if (start_offset < 0)
+    {
+        start_offset = existing_list.size() + start_offset;
+    }
+    if (end_offset < 0)
+    {
+        end_offset = existing_list.size() + end_offset;
+    }
+
+    RespArray result_list{};
+    if (start_offset > end_offset || start_offset >= static_cast<int>(existing_list.size()))
+    {
+        return std::make_shared<RespType>(result_list);
+    }
+    start_offset = std::max(0, start_offset);
+    end_offset = std::min(end_offset, static_cast<int>(existing_list.size() - 1));
+    for (int index = start_offset; index <= end_offset; index++)
+    {
+        result_list.push_back(existing_list[index]);
+    }
+    return std::make_shared<RespType>(result_list);
+}
 } // namespace kredis
