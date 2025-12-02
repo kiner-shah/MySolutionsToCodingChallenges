@@ -10,6 +10,7 @@ const RespTypePtr CommandProcessor::OK_RESPONSE = std::make_shared<RespType>(Res
 const RespTypePtr CommandProcessor::NOT_IMPLEMENTED_RESPONSE = std::make_shared<RespType>(RespError{not_implemented});
 const RespTypePtr CommandProcessor::PONG_RESPONSE = std::make_shared<RespType>(RespString{"PONG", false});
 const RespTypePtr CommandProcessor::INVALID_NUMBER_ARGS_RESPONSE = std::make_shared<RespType>(RespError{invalid_number_arguments});
+const RespTypePtr CommandProcessor::INVALID_ARG_FORMAT_RESPONSE = std::make_shared<RespType>(RespError{invalid_argument_format});
 const RespTypePtr CommandProcessor::INVALID_EXPIRY_VALUE_RESPONSE = std::make_shared<RespType>(RespError{invalid_expiry_value});
 const std::uint64_t CommandProcessor::EXPIRY_CHECKING_PERIOD_SECONDS = 10;
 
@@ -216,6 +217,54 @@ bool CommandProcessor::process(const RespType& command, RespTypePtr& response)
         {
             const auto& key = std::get<RespString>(array[1]);
             response = m_dictionary_manager->decrement(key.m_str);
+        }
+    }
+    else if (command_name.m_str == "LPUSH")
+    {
+        if (array.size() >= 3)
+        {
+            const auto& key = std::get<RespString>(array[1]);
+            std::vector<RespString> values{array.size() - 2};
+            for (std::size_t index = 2; index < array.size(); index++)
+            {
+                values[index - 2] = std::get<RespString>(array[index]);
+            }
+            response = m_dictionary_manager->push_front(key.m_str, values);
+        }
+    }
+    else if (command_name.m_str == "RPUSH")
+    {
+        if (array.size() >= 3)
+        {
+            const auto& key = std::get<RespString>(array[1]);
+            std::vector<RespString> values{array.size() - 2};
+            for (std::size_t index = 2; index < array.size(); index++)
+            {
+                values[index - 2] = std::get<RespString>(array[index]);
+            }
+            response = m_dictionary_manager->push_back(key.m_str, values);
+        }
+    }
+    else if (command_name.m_str == "LRANGE")
+    {
+        if (array.size() == 4)
+        {
+            const auto& key = std::get<RespString>(array[1]);
+            const auto& start = std::get<RespString>(array[2]);
+            const auto& end = std::get<RespString>(array[3]);
+            auto start_offset_opt = is_valid_signed_64_bit_int(start.m_str);
+            if (!start_offset_opt.has_value())
+            {
+                response = INVALID_ARG_FORMAT_RESPONSE;
+                return true;
+            }
+            auto end_offset_opt = is_valid_signed_64_bit_int(end.m_str);
+            if (!end_offset_opt.has_value())
+            {
+                response = INVALID_ARG_FORMAT_RESPONSE;
+                return true;
+            }
+            response = m_dictionary_manager->get_list(key.m_str, start_offset_opt.value(), end_offset_opt.value());
         }
     }
     else
