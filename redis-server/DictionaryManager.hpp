@@ -4,20 +4,14 @@
 #include <shared_mutex>
 #include <string>
 #include <memory>
-#include <optional>
 #include <thread>
 #include <asio/io_context.hpp>
 #include <asio/steady_timer.hpp>
-#include "RespTypes.hpp"
+#include "DictionaryValue.hpp"
+#include "RdbManager.hpp"
 
 namespace kredis
 {
-struct DictionaryValue
-{
-    RespTypePtr m_value;
-    std::optional<std::uint64_t> m_expiry_timestamp;
-};
-
 class DictionaryManager : public std::enable_shared_from_this<DictionaryManager>
 {
     using DictionaryType = std::unordered_map<std::string, DictionaryValue>;
@@ -30,6 +24,7 @@ class DictionaryManager : public std::enable_shared_from_this<DictionaryManager>
 
     DictionaryType m_dictionary;
     mutable std::shared_mutex m_shared_mutex;
+    RdbManager m_rdb_manager;
 
     void try_remove_expired_keys();
     void handle_timer_complete(const asio::error_code& error);
@@ -48,5 +43,7 @@ public:
     RespTypePtr push_front(const std::string& key, const std::vector<RespString>& values);
     RespTypePtr push_back(const std::string& key, const std::vector<RespString>& values);
     RespTypePtr get_list(const std::string& key, int start_offset, int end_offset);
+    bool save();
+    void load();
 };
 }   // namespace kredis

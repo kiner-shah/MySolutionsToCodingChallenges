@@ -92,6 +92,7 @@ DictionaryManager::DictionaryManager(std::uint64_t expiry_checking_period_second
     m_expiry_checking_period_seconds{expiry_checking_period_seconds}
 {
     m_io_context_thread = std::thread([this]() { m_io_context.run(); });
+    load();
 }
 
 DictionaryManager::~DictionaryManager()
@@ -123,6 +124,7 @@ RespTypePtr DictionaryManager::get(const std::string &key)
     {
         return std::make_shared<RespType>(RespNull{});
     }
+    // TODO: is it needed to cancel here? Can the timer be kept running?
     m_timer.cancel();
     if (has_expired(it->second))
     {
@@ -151,6 +153,7 @@ RespTypePtr DictionaryManager::increment(const std::string &key)
     {
         return std::make_shared<RespType>(RespNull{});
     }
+    // TODO: is it needed to cancel here? Can the timer be kept running?
     m_timer.cancel();
     if (has_expired(it->second))
     {
@@ -186,6 +189,7 @@ RespTypePtr DictionaryManager::decrement(const std::string &key)
     {
         return std::make_shared<RespType>(RespNull{});
     }
+    // TODO: is it needed to cancel here? Can the timer be kept running?
     m_timer.cancel();
     if (has_expired(it->second))
     {
@@ -314,5 +318,29 @@ RespTypePtr DictionaryManager::get_list(const std::string &key, int start_offset
         result_list.push_back(existing_list[index]);
     }
     return std::make_shared<RespType>(result_list);
+}
+
+bool DictionaryManager::save()
+{
+    std::shared_lock<std::shared_mutex> lock{m_shared_mutex};
+    std::vector<std::pair<std::string, DictionaryValue>> dictionary_snapshot;
+    for (const auto& entry : m_dictionary)
+    {
+        dictionary_snapshot.push_back(entry);
+    }
+    return m_rdb_manager.save(dictionary_snapshot);
+}
+
+void DictionaryManager::load()
+{
+    std::unique_lock<std::shared_mutex> lock{m_shared_mutex};
+    auto snapshot = m_rdb_manager.load();
+    if (snapshot.has_value())
+    {
+        for (const auto& entry : *snapshot)
+        {
+            m_dictionary[entry.first] = entry.second;
+        }
+    }
 }
 } // namespace kredis
