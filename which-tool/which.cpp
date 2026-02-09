@@ -16,7 +16,7 @@ std::vector<std::string_view> split_path_string(std::string_view path_sv)
     std::vector<std::string_view> candidate_paths;
     while (true)
     {
-        auto delimiter_pos = path_sv.find(delimiter);
+        const std::size_t delimiter_pos = path_sv.find(delimiter);
         if (delimiter_pos == std::string_view::npos)
         {
             candidate_paths.push_back(path_sv.substr(0));
@@ -35,26 +35,20 @@ void print_program_path(const char* program_name, const std::vector<std::string_
 {
     namespace fs = std::filesystem;
 
-    fs::path program_name_sv{program_name};
+    const fs::path program_name_sv{program_name};
     for (const auto& path : candidate_paths)
     {
-        if (!fs::exists(path) || !fs::is_directory(path))
-        {
-            // std::cerr << "Candidate path " << path << " does not exist or is not a directory.\n";
-            continue;
-        }
+        fs::path program_path{path};
+        program_path /= program_name;
 
-        auto it = std::find_if(fs::directory_iterator{path}, fs::directory_iterator{},
-            [&program_name_sv](const fs::directory_entry& dir_entry)
-            {
-                return (dir_entry.is_regular_file() || dir_entry.is_symlink())
-                    && (dir_entry.status().permissions() & fs::perms::owner_exec) > fs::perms::none
-                    && dir_entry.path().filename() == program_name_sv;
-            });
-
-        if (it != fs::directory_iterator{})
+        const fs::file_status program_status = fs::status(program_path);
+        // Note: We don't need to check if the file exists.
+        // fs::exists(program_path) only checks its file_status.type() (obtained by fs::status(program_path))
+        // and returns true if it's anything other than fs::file_type::none or fs::file_type::not_found.
+        if ((program_status.type() == fs::file_type::regular || program_status.type() == fs::file_type::symlink)
+            && (program_status.permissions() & fs::perms::owner_exec) > fs::perms::none)
         {
-            std::cout << it->path().generic_string() << '\n';
+            std::cout << program_path.generic_string() << '\n';
             break;
         }
     }
@@ -76,7 +70,7 @@ int main(int argc, char** argv)
         return EXIT_FAILURE;
     }
 
-    auto candidate_paths = split_path_string(path_env_cstr);
+    const auto candidate_paths = split_path_string(path_env_cstr);
     for (int i = 1; i < argc; i++)
     {
         print_program_path(argv[i], candidate_paths);
