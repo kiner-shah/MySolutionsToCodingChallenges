@@ -8,7 +8,39 @@ These dependencies should be present in the project root directory.
 - spdlog should be compiled into a library and the install folder should be present in the project root directory
 - asio should be downloaded and extracted in the project root directory
 
-# Notes
+## Setup for testing
+1. Create three folders: `server8080`, `server8081` and `server8082`. Each of these folder will have an `index.html` file with following content:
+    ```
+    <!DOCTYPE html>
+    <html lang="en">
+        <head>
+            <meta charset="utf-8">
+            <title>Index Page</title>
+        </head>
+        <body>
+            Hello from the web server running at on port 8080.
+        </body>
+    </html>
+    ```
+    Replace `8080` above with `8081` and `8082` in `server8081` and `server8082` respectively.
+2. To test for concurrent requests, create a file `urls.txt` with following content:
+    ```
+    url = "http://localhost:2000"
+    url = "http://localhost:2000"
+    url = "http://localhost:2000"
+    url = "http://localhost:2000"
+    url = "http://localhost:2000"
+    url = "http://localhost:2000"
+    url = "http://localhost:2000"
+    url = "http://localhost:2000"
+    ```
+    Then, use the following command to make concurrent requests:
+    ```
+    curl --parallel --parallel-immediate --parallel-max 3 --config urls.txt
+    ```
+    Tweak the maximum parallelisation to see how well your server copes!
+
+## Notes
 1. If you get an error like following:
     ```
     FATAL: ThreadSanitizer: unexpected memory mapping 0x5e51ce1ec000-0x5e51ce1fb000
