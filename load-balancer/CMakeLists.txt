@@ -4,7 +4,17 @@ project(LoadBalancer CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-add_executable(KLoadBalancer load_balancer.cpp LoadBalancer.cpp UserClient.cpp Client.cpp ServerDetails.cpp HealthChecker.cpp utils.cpp)
+add_executable(KLoadBalancer
+    load_balancer.cpp
+    ThreadPool.cpp
+    LbClientManager.cpp
+    UserClientManager.cpp
+    LoadBalancer.cpp
+    UserClient.cpp
+    LbClient.cpp
+    ServerDetails.cpp
+    HealthChecker.cpp
+    utils.cpp)
 if (WIN32 OR MSVC)
     # Need to copy clang_rt.asan_dbg_dynamic-x86_64.dll from
     # C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\<your-version>\bin\Hostx64\x64

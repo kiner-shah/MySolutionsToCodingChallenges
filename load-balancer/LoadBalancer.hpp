@@ -3,55 +3,36 @@
 #include <asio/io_context.hpp>
 #include <asio/ip/tcp.hpp>
 #include <asio/signal_set.hpp>
+#include <memory>
 #include <string_view>
 #include <vector>
-#include <queue>
-#include <mutex>
+// #include <queue>
+// #include <mutex>
+// #include <condition_variable>
 #include <atomic>
-#include <condition_variable>
 #include <spdlog/spdlog.h>
 #include "UserClient.hpp"
-#include "Client.hpp"
+#include "LbClient.hpp"
 #include "HealthChecker.hpp"
+#include "UserClientManager.hpp"
+#include "LbClientManager.hpp"
+#include "ThreadPool.hpp"
 
 namespace kload_balancer
 {
 class LoadBalancer
 {
-    using UserClientPtr = std::unique_ptr<UserClient>;
-    using ClientPtr = std::unique_ptr<Client>;
-
-    asio::io_context m_io_context;
+    std::shared_ptr<ThreadPool> m_thread_pool;
     asio::signal_set m_signals;
-    std::vector<UserClientPtr> m_user_clients;
-    std::mutex m_user_clients_mutex;
-    std::vector<ClientPtr> m_clients;
-    std::mutex m_clients_mutex;
-    // std::vector<ServerDetails> m_servers;
     asio::ip::tcp::acceptor m_acceptor;
     std::atomic_bool m_is_stopped = false;
     std::string_view m_ip_address;
     std::string_view m_port;
 
-    std::int_least64_t m_user_client_count;
-
     std::shared_ptr<spdlog::logger> m_logger;
 
-    // We cannot call destructors (unique_ptr::reset) of UserClient and Client objects
-    // from their respective handler functions (results in system throwing deadlock error).
-    // The destructors join the io_context_thread and when we call from handler function, it's like thread
-    // is trying to join itself, which is not possible.
-    // Thus we have to call them outside of handlers, created these threads below to handle that.
-    // What we need to delete, we push to the respective queues and then in separate thread, it gets deleted.
-    std::queue<std::string> m_to_delete_clients;
-    std::mutex m_to_delete_clients_mutex;
-    std::condition_variable m_to_delete_clients_cv;
-    std::queue<std::string> m_to_delete_servers;
-    std::mutex m_to_delete_servers_mutex;
-    std::condition_variable m_to_delete_servers_cv;
-    std::thread m_unused_clients_deleter;
-    std::thread m_unused_servers_deleter;
-
+    std::unique_ptr<UserClientManager> m_user_client_manager;
+    std::shared_ptr<LbClientManager> m_lb_client_manager;
     std::unique_ptr<HealthChecker> m_health_checker;
 
     void handle_accept(const asio::error_code& error, std::string user_client_id);
