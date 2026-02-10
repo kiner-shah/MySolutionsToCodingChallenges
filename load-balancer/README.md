@@ -56,13 +56,38 @@ These dependencies should be present in the project root directory.
     ```
     This change is temporary and will reset to original value on reboot.
 
-## Scribble
-Client:
+## Scribble for improvements - new architecture
+ThreadPool:
     io_context
-    executor_work_guard
+    work_guard
+    vector<thread> threads
+
+    ThreadPool() - set work guard, create threads and run io context from each
+    ~ThreadPool() - reset work guard, stop io context and join threads
+
+UserClientManager:
+    vector<UserClientPtr> - reserve to some value, say 20
+    logger
+    client_counter
+    clients_mutex - shared
+
+    UserClientPtr create_new_user_client(io_context, readcallback, writecallback)
+    UserClientPtr get_user_client(id)
+    remove_user_client(id)
+
+LbClientManager:
+    vector<LbClientPtr> - reserve to some value, say 10
+    logger
+    lb_clients_mutex - shared
+
+    LbClientPtr create_new_lb_client(io_context, ip, port, health_check=false, readcallback, writecallback)
+    LbClientPtr get_lb_client(ip_port, health_check=false)
+    remove_lb_client(ip_port)
+
+LbClient:
     endpoint
     socket
-    thread
+    for_health_check=false
     
     read_buffer
     write_buffer
@@ -70,18 +95,16 @@ Client:
     on_read_complete
     on_write_complete
     
-    Client(ip, port) -> resolves address and connects to it, calls make_work_guard on io_context, starts io_context in a thread
+    LbClient(ip, port) -> resolves address and connects to it
 
     read() -> calls async handle_read
     handle_read() -> calls on_read_complete
     write(data) -> calls async handle_write
     handle_write() -> calls on_write_complete
 
-    ~Client() -> resets work_guard and joins thread, closes socket
+    ~LbClient() -> closes socket
 
 UserClient:
-    io_context
-    executor_work_guard
     socket
     client_id
 
@@ -91,55 +114,50 @@ UserClient:
     on_read_complete
     on_write_complete
 
-    UserClient() -> calls make_work_guard on io_context and starts io_context in a thread
+    UserClient() - socket initialization
 
     read() -> calls async handle_read
     handle_read() -> calls on_read_complete
     write(data) -> calls async handle_write
     handle_write() -> calls on_write_complete
 
-    ~UserClient() -> resets work_guard and joins thread, closes socket
+    ~UserClient() -> closes socket
 
 LoadBalancer:
-    io_context
     port
-    executor_work_guard
-    vector<BackendServerPtr>
-    vector<ClientPtr>
+    LbClientManager
+    UserClientManager
+    ThreadPoolPtr
     acceptor
 
     LoadBalancer(port) -> stores port, registers signals and call async_wait (call stop() inside), accept()
     add_server() -> adds a new server
     get_next_available_server() -> gets next available server
     
-    start() -> starts io_context
+    start() -> create thread pool ptr here
 
     accept() -> calls handle_accept()
-    handle_accept() -> creates a new client with next available client_id and calls its read()
-    on_client_read_done() -> calls server write()
+    handle_accept() -> creates a new client with next available client_id, threadpool io_context and calls its read()
+    on_client_read_done() -> created a new server with threadpool io_context and calls its write()
     on_client_write_done() -> closes the connection with client
     on_server_read_done() -> calls client write(), closes connection with server
     on_server_write_done() -> calls server read()
     
-    stop() -> cancels all requests (clients, userclients), closes all sockets
+    stop() -> reset thread pool ptr here
 
     ~LoadBalancer() -> calls stop()
 
 
 HealthChecker:
-    io_context
     steady_timer
-    std::vector<server_details>
-    thread -> for closing server connections
-    delete_client_list
-    mutex -> for delete_client_list
+    const LbClientManager& manager
 
     HealthChecker(period) -> initializes timer, starts thread
     add_server(ip_address, port) -> adds a new server to vector
     std::optional<ServerDetails> get_next_available_server()
-    start() -> calls async_wait and runs io_context
+    start() -> calls async_wait
     cancel() -> cancels timer
     perform_health_check() -> connects to servers and sends a GET request
     handle_timer_complete() -> calls perform_health_check(), sets new expiry and calls async_wait
     on_server_write_done() -> calls server read
-    on_server_read_done() -> sets availability (if no error), closes server connection in separate thread
+    on_server_read_done() -> sets availability (if no error), closes server connection
