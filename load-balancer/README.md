@@ -8,6 +8,18 @@ These dependencies should be present in the project root directory.
 - spdlog should be compiled into a library and the install folder should be present in the project root directory
 - asio should be downloaded and extracted in the project root directory
 
+# Notes
+1. If you get an error like following:
+    ```
+    FATAL: ThreadSanitizer: unexpected memory mapping 0x5e51ce1ec000-0x5e51ce1fb000
+    ```
+    This error occurs when ThreadSanitizer (TSan) (a C/C++ data race detector) fails because the memory layout of the program, often due to high-entropy Address Space Layout Randomization (ASLR), conflicts with the shadow memory mapping required by TSan.
+    To solve this, try lowering ASLR entropy. For this, you may need to set `vm.mmap_rnd_bits` value to some lower value:
+    ```
+    sudo sysctl vm.mmap_rnd_bits=28
+    ```
+    This change is temporary and will reset to original value on reboot.
+
 ## Scribble
 Client:
     io_context
