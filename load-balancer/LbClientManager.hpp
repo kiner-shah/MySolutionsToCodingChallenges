@@ -12,7 +12,14 @@ class LbClientManager
     std::unordered_map<std::string, LbClientPtr> m_lb_clients;
     std::shared_mutex m_lb_clients_mutex;
 public:
-    LbClientPtr create_new_lb_client(asio::io_context& io_context, std::string_view ip_address, std::string_view port, LbClientCallbackType on_read, LbClientCallbackType on_write, bool is_for_health_check = false);
+    LbClientPtr create_new_lb_client(asio::io_context& io_context,
+        std::string_view ip_address,
+        std::string_view port,
+        LbClientCallbackType on_read,
+        LbClientCallbackType on_write,
+        LbClientConnectCallbackType on_connect,
+        bool is_for_health_check = false);
+    void add_lb_client(LbClientPtr lb_client);
     LbClientPtr get_lb_client(const std::string& ip_port);
     void remove_lb_client(const std::string& ip_port);
 };
