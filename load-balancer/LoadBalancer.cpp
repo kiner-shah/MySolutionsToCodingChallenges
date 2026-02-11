@@ -110,6 +110,7 @@ void LoadBalancer::handle_accept(const asio::error_code &error, std::string user
     }
     else
     {
+        m_logger->error("Error while reading from client [UserClientId {}]: {}", user_client_id, error.message());
         m_user_client_manager->remove_user_client(user_client_id);
     }
 }
@@ -118,6 +119,8 @@ void LoadBalancer::on_client_read_done(std::array<unsigned char, 2048> read_data
 {
     if (error)
     {
+        m_user_client_manager->remove_user_client(user_client_id);
+        m_logger->error("Error while reading from client [UserClientId {}]: {}", user_client_id, error.message());
         return;
     }
     m_logger->debug("Received message from [UserClientId {}]:\n{}", user_client_id, std::string{read_data.begin(), read_data.end()});
@@ -145,11 +148,28 @@ void LoadBalancer::on_client_read_done(std::array<unsigned char, 2048> read_data
         next_available_server.value().get_ip(),
         next_available_server.value().get_port(),
         std::bind(&LoadBalancer::on_server_read_done, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4, std::placeholders::_5),
-        std::bind(&LoadBalancer::on_server_write_done, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4, std::placeholders::_5)
+        std::bind(&LoadBalancer::on_server_write_done, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4, std::placeholders::_5),
+        [this, read_data = std::move(read_data), user_client_id = std::move(user_client_id)](asio::error_code error, LbClientPtr lb_client_ptr)
+        {
+            if (error)
+            {
+                m_logger->error("Failed to connect to backend server: {}", error.message());
+                auto user_client_ptr = m_user_client_manager->get_user_client(user_client_id);
+                if (user_client_ptr)
+                {
+                    std::array<unsigned char, 2048> buffer = get_service_unavailable_message();
+                    user_client_ptr->write(buffer);
+                }
+                return;
+            }
+            m_lb_client_manager->add_lb_client(lb_client_ptr);
+            // write to the server
+            m_logger->debug("Waiting for write to complete for [LbClient {}]", lb_client_ptr->get_id());
+            lb_client_ptr->write(read_data, std::move(user_client_id));
+        }
     );
-    // write to the server
-    m_logger->debug("Waiting for write to complete for [LbClient {}]", lb_client_ptr->get_id());
-    lb_client_ptr->write(read_data, std::move(user_client_id));
+    // m_logger->debug("Waiting for write to complete for [LbClient {}]", lb_client_ptr->get_id());
+    // lb_client_ptr->write(read_data, std::move(user_client_id));
 }
 
 void LoadBalancer::on_client_write_done(std::array<unsigned char, 2048> write_data, asio::error_code, std::size_t, std::string user_client_id)

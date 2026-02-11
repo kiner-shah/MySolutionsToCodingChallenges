@@ -9,19 +9,24 @@ LbClientPtr LbClientManager::create_new_lb_client(
     std::string_view port,
     LbClientCallbackType on_read,
     LbClientCallbackType on_write,
+    LbClientConnectCallbackType on_connect,
     bool is_for_health_check)
 {
-    std::unique_lock<std::shared_mutex> lock{m_lb_clients_mutex};
     auto lb_client = std::make_shared<LbClient>(
         io_context,
-        ip_address,
-        port,
         std::move(on_read),
         std::move(on_write),
+        std::move(on_connect),
         is_for_health_check
     );
-    auto result = m_lb_clients.insert({lb_client->get_id(), lb_client});
-    return result.first->second;
+    lb_client->connect(io_context, ip_address, port);
+    return lb_client;
+}
+
+void LbClientManager::add_lb_client(LbClientPtr lb_client)
+{
+    std::unique_lock<std::shared_mutex> lock{m_lb_clients_mutex};
+    m_lb_clients.insert({lb_client->get_id(), lb_client});
 }
 
 LbClientPtr LbClientManager::get_lb_client(const std::string &ip_port)

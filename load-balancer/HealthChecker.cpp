@@ -66,26 +66,34 @@ void HealthChecker::perform_health_check()
 {
     m_logger->info("Running health check");
     std::scoped_lock<std::mutex> server_lock{m_servers_mutex};
-    for (auto& server : m_servers)
+    for (std::size_t index = 0; index < m_servers.size(); index++)
     {
-        try
-        {
-            auto lb_client_ptr = m_lb_client_manager->create_new_lb_client(
-                m_thread_pool->get_io_context(),
-                server.get_ip(),
-                server.get_port(),
-                std::bind(&HealthChecker::on_server_read_done, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4, std::placeholders::_5),
-                std::bind(&HealthChecker::on_server_write_done, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4, std::placeholders::_5),
-                true
-            );
-            std::array<unsigned char, 2048> buffer = construct_health_check_message(server);
-            lb_client_ptr->write(buffer, "HealthChecker");
-        }
-        catch (const std::system_error& e)
-        {
-            m_logger->debug("Error during health check: {}", e.what());
-            server.set_available(false);
-        }
+        auto& server = m_servers[index];
+        auto lb_client_ptr = m_lb_client_manager->create_new_lb_client(
+            m_thread_pool->get_io_context(),
+            server.get_ip(),
+            server.get_port(),
+            std::bind(&HealthChecker::on_server_read_done, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4, std::placeholders::_5),
+            std::bind(&HealthChecker::on_server_write_done, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4, std::placeholders::_5),
+            [this, server_index = index](const asio::error_code& error, LbClientPtr lb_client_ptr)
+            {
+                std::scoped_lock<std::mutex> server_lock{m_servers_mutex};
+                if (server_index >= m_servers.size())
+                {
+                    return;
+                }
+                if (error)
+                {
+                    m_logger->debug("Error during health check: {}", error.message());
+                    m_servers[server_index].set_available(false);
+                    return;
+                }
+                m_lb_client_manager->add_lb_client(lb_client_ptr);
+                std::array<unsigned char, 2048> buffer = construct_health_check_message(m_servers[server_index]);
+                lb_client_ptr->write(buffer, "HealthChecker");
+            },
+            true
+        );
     }
 }
 
