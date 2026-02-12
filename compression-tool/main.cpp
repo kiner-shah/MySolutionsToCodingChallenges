@@ -26,30 +26,12 @@ std::ostream& operator<<(std::ostream& os, const Config& config)
     return os;
 }
 
-// Fills the map with counts of each UTF-32 codepoint and returns the converted sequence of UTF-32 codepoints.
-std::vector<char32_t> process_file_and_compute_frequency(const std::string& file_contents, std::unordered_map<char32_t, std::uint64_t>& char32_frequency_map)
+void compute_frequency(std::string_view file_contents, std::unordered_map<unsigned char, std::uint64_t>& frequency_map)
 {
-    char32_t utf32_codepoint;
-    unsigned int state = 0;
-    std::vector<char32_t> codepoints;
-
     for (unsigned char c : file_contents)
     {
-        state = kcompress::decode_utf8_char_to_utf32(c, state, utf32_codepoint);
-
-        if (state == 8)
-        {
-            std::cerr << "Failure: bad encoding\n";
-            return std::vector<char32_t>{};
-        }
-        else if (state == 0)
-        {
-            codepoints.push_back(utf32_codepoint);
-            char32_frequency_map[utf32_codepoint]++;
-        }
+        frequency_map[c]++;
     }
-    
-    return codepoints;
 }
 
 void print_usage(std::string program_name)
@@ -58,6 +40,14 @@ void print_usage(std::string program_name)
     std::cout << "\n  -d|-e filename\tDecode/encode the given file"
                 "\n  -o outputfilename\tName of the file where output needs to be stored\n";
 }
+
+// void print_bitmap(const std::unordered_map<unsigned char, std::string>& bitmap)
+// {
+//     for (const auto& [c, value] : bitmap)
+//     {
+//         std::cout << std::bitset<8>(c) << ' ' << value << '\n';
+//     }
+// }
 }   // namespace
 
 int main(int argc, char** argv)
@@ -117,30 +107,20 @@ int main(int argc, char** argv)
     {
         // Encoding
 
-        // Convert multi-byte characters to wide char - store count of each char in a map
-        // Create individual tree nodes
-
-        std::unordered_map<char32_t, std::uint64_t> char32_frequency_map;
-        auto codepoint_sequence = process_file_and_compute_frequency(buffer, char32_frequency_map);
-        if (codepoint_sequence.empty())
-        {
-            return 1;
-        }
-        //std::cout << converted_input.size() << '\n';
+        // Compute frequency
+        std::unordered_map<unsigned char, std::uint64_t> frequency_map;
+        compute_frequency(buffer, frequency_map);
 
         // Build tree
-        kcompress::HuffmanTree huffman_tree{char32_frequency_map};
-        char32_frequency_map.clear();
+        kcompress::HuffmanTree huffman_tree{frequency_map};
+        frequency_map.clear();
         // huffman_tree.print_tree();
 
         // Serialize data
         auto bit_map = huffman_tree.get_bit_map();
-        // for (const auto& [codepoint, value] : bit_map)
-        // {
-        //     std::cout << codepoint << ' ' << value << '\n';
-        // }
+        // print_bitmap(bit_map);
         std::uint64_t total_bits = 0;
-        auto output_buffer = huffman_tree.serialize_payload(codepoint_sequence, total_bits);
+        auto output_buffer = huffman_tree.serialize_payload(std::vector<unsigned char>(buffer.begin(), buffer.end()), total_bits);
 
         // Serialize tree
         kcompress::CompressionHeader header;
@@ -148,20 +128,22 @@ int main(int argc, char** argv)
         header.m_serialized_tree = huffman_tree.serialize(header.m_serialized_tree_total_bits);
         header.m_payload_length_bits = total_bits;
         header.m_header_length = 24u + header.m_serialized_tree.size();
+        // std::cout << header.m_serialized_tree.size() << ' ' << header.m_serialized_tree_total_bits << '\n';
         // std::cout << "Header length: " << std::hex << header.m_header_length << std::dec << '\n';
         // std::cout << "Original file bytes: " << std::hex << header.m_original_file_bytes << std::dec << '\n';
         // std::cout << "Total bits in serialized tree: " << std::hex << header.m_serialized_tree_total_bits << std::dec << '\n';
+        // std::cout << "Serialized tree bytes: " << header.m_serialized_tree.size() << '\n';
         // std::cout << "Payload bytes: " << output_buffer.size() << '\n';
         // std::cout << "Payload bits: " << std::hex << header.m_payload_length_bits << std::dec << '\n';
         // for (unsigned char c : header.m_serialized_tree)
         // {
-        //     std::bitset<8> b(c);
-        //     std::cout << b << ' ';
-        // }
+        //     std::cout << std::bitset<8>(c) << ' ';
+        // } std::cout << '\n';
 
         output_file << header;
         for (auto output_buffer_byte : output_buffer)
         {
+            // std::cout << std::bitset<8>(output_buffer_byte) << ' ';
             output_file << output_buffer_byte;
         }
         output_file.close();
@@ -192,25 +174,29 @@ int main(int argc, char** argv)
             return 1;
         }
 
+        // std::cout << header.m_serialized_tree.size() << ' ' << header.m_serialized_tree_total_bits << '\n';
+
         kcompress::HuffmanTree huffman_tree;
         huffman_tree.deserialize(header.m_serialized_tree, header.m_serialized_tree_total_bits);
 
         auto bit_map = huffman_tree.get_bit_map();
-        // for (const auto& [codepoint, value] : bit_map)
-        // {
-        //     std::cout << codepoint << ' ' << value << '\n';
-        // }
+        // print_bitmap(bit_map);
 
-        auto codepoints = huffman_tree.deserialize_payload(payload_buffer, header.m_payload_length_bits);
-        for (const auto& codepoint : codepoints)
+        auto bytes = huffman_tree.deserialize_payload(payload_buffer, header.m_payload_length_bits);
+        for (auto byte : bytes)
         {
-            std::array<unsigned char, 4> bytes;
-            auto converted_bytes_length = kcompress::convert_utf32_to_utf8_char(codepoint, bytes);
-            for (unsigned int bytes_index = 0; bytes_index < converted_bytes_length; bytes_index++)
-            {
-                output_file << bytes[bytes_index];
-            }
+            output_file << byte;
         }
+        // auto codepoints = huffman_tree.deserialize_payload(payload_buffer, header.m_payload_length_bits);
+        // for (const auto& codepoint : codepoints)
+        // {
+        //     std::array<unsigned char, 4> bytes;
+        //     auto converted_bytes_length = kcompress::convert_utf32_to_utf8_char(codepoint, bytes);
+        //     for (unsigned int bytes_index = 0; bytes_index < converted_bytes_length; bytes_index++)
+        //     {
+        //         output_file << bytes[bytes_index];
+        //     }
+        // }
         output_file.close();
     }
 }
