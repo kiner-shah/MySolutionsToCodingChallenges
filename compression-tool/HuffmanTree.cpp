@@ -4,7 +4,6 @@
 #include <iostream>
 #include <stack>
 #include <bitset>
-#include "utils.hpp"
 
 namespace kcompress
 {
@@ -56,7 +55,7 @@ void HuffmanTree::destroy_tree(HuffmanTreeNode *root)
     root = nullptr;
 }
 
-void HuffmanTree::construct_bit_map(HuffmanTreeNode *root, std::string& value)
+void HuffmanTree::construct_bit_map(HuffmanTreeNode *root, std::vector<bool>& value)
 {
     if (root == nullptr)
     {
@@ -65,18 +64,18 @@ void HuffmanTree::construct_bit_map(HuffmanTreeNode *root, std::string& value)
     if (root->is_leaf_node())
     {
         // std::cout << root->m_char.value() << ' ' << value << '\n';
-        m_bit_map.emplace(root->m_char.value(), value);
+        m_bit_map[root->m_char.value()] = value;
         return;
     }
     if (root->m_left)
     {
-        value.push_back('0');
+        value.push_back(false);
         construct_bit_map(root->m_left, value);
         value.pop_back();
     }
     if (root->m_right)
     {
-        value.push_back('1');
+        value.push_back(true);
         construct_bit_map(root->m_right, value);
         value.pop_back();
     }
@@ -102,17 +101,22 @@ HuffmanTree::HuffmanTree(const FrequencyMapType& frequency_map)
 {
     HeapType nodes;
     // Construct individual (leaf) nodes
-    for (const auto& [char_value, count] : frequency_map)
+    for (std::size_t index = 0; index < frequency_map.size(); index++)
     {
-        nodes.emplace(new HuffmanTreeNode(char_value, count));
+        const auto& count = frequency_map[index];
+        if (count > 0)
+        {
+            nodes.emplace(new HuffmanTreeNode(static_cast<unsigned char>(index), count));
+        }
     }
+
     build_tree(nodes);
     assert(nodes.size() == 1);
     m_root = nodes.top();
 
     m_tree_height = get_tree_height(m_root);
 
-    std::string value{};
+    std::vector<bool> value{};
     value.reserve(m_tree_height);
     construct_bit_map(m_root, value);
 }
@@ -121,10 +125,10 @@ HuffmanTree::~HuffmanTree()
 {
     destroy_tree(m_root);
     m_tree_height = 0;
-    m_bit_map.clear();
+    m_bit_map.fill(std::nullopt);
 }
 
-HuffmanTree::BitMapType HuffmanTree::get_bit_map() const
+const HuffmanTree::BitMapType& HuffmanTree::get_bit_map() const
 {
     return m_bit_map;
 }
@@ -151,13 +155,6 @@ void HuffmanTree::print_tree()
         if (element->is_leaf_node())
         {
             std::cout << ' ' << element->m_char.value();
-
-            // std::array<unsigned char, 4> bytes{};
-            // auto no_of_bytes_for_char = convert_utf32_to_utf8_char(element->m_utf32_codepoint.value(), bytes);
-            // for (unsigned int index = 0; index < no_of_bytes_for_char; index++)
-            // {
-            //     std::cout << bytes[index];
-            // }
         }
         std::cout << ')' << ' ';
         if (element->m_right)
@@ -212,21 +209,17 @@ std::vector<unsigned char> HuffmanTree::serialize(std::uint64_t& total_bits)
             auto byte = node->m_char.value();
             if (remaining_bits < 8)
             {
-                // std::cout << std::bitset<8>(current_byte) << " | " << std::bitset<8>(byte) << " -> ";
                 current_byte = (current_byte << remaining_bits) | (byte >> (8 - remaining_bits));
                 buffer.push_back(current_byte);
                 // Note: remaining bits will remain same
-                // std::cout << std::bitset<8>(current_byte) << " | " << std::bitset<8>(((byte << remaining_bits) & 0xff) >> remaining_bits) << ' ' << static_cast<int>(remaining_bits) << '\n';
                 current_byte = ((byte << remaining_bits) & 0xff) >> remaining_bits;
                 total_bits += 8;
             }
             else
             {
-                // std::cout << std::bitset<8>(current_byte) << " | " << std::bitset<8>(byte) << " -> ";
                 current_byte = byte;
                 buffer.push_back(current_byte);
                 // Note: remaining bits will remain same
-                // std::cout << std::bitset<8>(current_byte) << " | " << std::bitset<8>(0) << ' ' << static_cast<int>(remaining_bits) << '\n';
                 current_byte = 0;
                 total_bits += 8;
             }
@@ -253,25 +246,28 @@ std::vector<unsigned char> HuffmanTree::serialize(std::uint64_t& total_bits)
 std::vector<unsigned char> HuffmanTree::serialize_payload(const std::vector<unsigned char> &buffer, std::uint64_t& total_bits)
 {
     std::vector<unsigned char> output_buffer;
+    output_buffer.reserve(buffer.size());
+
     unsigned char byte = 0;
     unsigned char remaining_bits = 8;
-    for (auto c : buffer)
+    for (unsigned char c : buffer)
     {
-        auto it = m_bit_map.find(c);
-        if (it == m_bit_map.end())
+        if (!m_bit_map[c].has_value())
         {
-            std::cerr << "Failure during encoding payload: character not found in bit map\n";
+            std::cerr << "Failure during encoding payload - character "
+            << "0x" << std::hex << static_cast<int>(c)
+            << " not found in bit map\n";
             exit(1);
         }
-        auto& code = it->second;
 
-        for (unsigned char code_bit : code)
+        auto& code = m_bit_map[c].value();
+        for (auto code_bit : code)
         {
-            if (code_bit == '0')
+            if (!code_bit)
             {
                 byte <<= 1;
             }
-            else if (code_bit == '1')
+            else if (code_bit)
             {
                 byte = (byte << 1) | 1;
             }
@@ -326,40 +322,26 @@ HuffmanTreeNode* HuffmanTree::deserialize(const std::vector<unsigned char> &seri
     if (bit == 0)
     {
         // If 0, create a non-leaf. For left and right, recursively continue for both.
-
-        // std::cout << "LIndex " << index << '\n';
         root->m_left = deserialize(serialized_tree, serialized_tree_bits, index, total_processed_bits, remaining_bits, root->m_left);
-        // std::cout << "RIndex " << index << '\n';
         root->m_right = deserialize(serialized_tree, serialized_tree_bits, index, total_processed_bits, remaining_bits, root->m_right);
     }
     else if (bit == 1)
     {
         //  If 1, create a tree leaf. Then read a byte and set the value of leaf with this byte
-
         unsigned char byte = 0;
         if (remaining_bits < 8)
         {
             if (index + 1 >= serialized_tree.size())
             {
-                // state = 8;
                 std::cerr << "Failure during decoding serialized tree\n";
                 exit(1);
-                // break;
             }
 
             unsigned char processed_bits = 8 - remaining_bits;
-            // std::bitset<8> b1(serialized_tree[index]);
-            // std::bitset<8> b((serialized_tree[index] << processed_bits) & 0xff);
-            // std::bitset<8> b2(serialized_tree[index + 1] >> remaining_bits);
-            // std::bitset<8> b3(serialized_tree[index + 1]);
-            // std::cout << index << ' ' << static_cast<int>(processed_bits) << ' ' << static_cast<int>(remaining_bits) << '\n';
-            // std::cout << b1 << " | " << b << ' ' << b2 << " | " << b3 << '\n';
             byte = ((serialized_tree[index] << processed_bits) & 0xff) | (serialized_tree[index + 1] >> remaining_bits);
         }
         else
         {
-            // std::bitset<8> b(serialized_tree[index]);
-            // std::cout << index << ':' << b << '\n';
             byte = serialized_tree[index];
         }
         index++;
@@ -389,15 +371,16 @@ void HuffmanTree::deserialize(const std::vector<unsigned char> &serialized_tree,
 
     m_tree_height = get_tree_height(m_root);
 
-    std::string value{};
+    std::vector<bool> value{};
     value.reserve(m_tree_height);
-    m_bit_map.clear();
+    m_bit_map.fill(std::nullopt);
     construct_bit_map(m_root, value);
 }
 
-std::vector<unsigned char> HuffmanTree::deserialize_payload(const std::vector<unsigned char> &serialized_payload, std::uint64_t serialized_payload_bits)
+std::vector<unsigned char> HuffmanTree::deserialize_payload(const std::vector<unsigned char> &serialized_payload, std::uint64_t serialized_payload_bits, std::uint64_t original_file_bytes)
 {
     std::vector<unsigned char> output;
+    output.reserve(original_file_bytes);
 
     HuffmanTreeNode* root = m_root;
 
