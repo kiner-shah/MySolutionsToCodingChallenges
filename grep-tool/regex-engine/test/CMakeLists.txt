@@ -1,0 +1,6 @@
+add_executable(KRegexEngineTests src/parser_test.cpp)
+
+target_include_directories(KRegexEngineTests PRIVATE include)
+target_link_libraries(KRegexEngineTests PRIVATE KRegexEngine)
+
+add_test(NAME KRegexEngineTests COMMAND KRegexEngineTests)
