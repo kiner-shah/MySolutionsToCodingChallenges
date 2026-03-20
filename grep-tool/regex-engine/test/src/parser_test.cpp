@@ -275,5 +275,29 @@ TEST_CASE("Parse Regex")
         },
         ""
     });
+
+    expect_ok(parse_regex("\\d"), ParseValue<Regex>{
+        Regex{
+            std::nullopt,
+            Expression{
+                std::vector<SubExpression>{
+                    SubExpression{
+                        std::vector<SubExpressionItem>{
+                            SubExpressionItem{
+                                Match{
+                                    MatchItem{
+                                        MatchCharacterClass{
+                                            CharacterClass{CharacterClassType::AnyDecimalDigit}
+                                        }
+                                    },
+                                    std::nullopt
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    });
     expect_error(parse_regex("([a-z0-9]+"));
 }

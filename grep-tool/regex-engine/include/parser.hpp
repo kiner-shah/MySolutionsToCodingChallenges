@@ -14,11 +14,11 @@ struct ParseValue
     T value;
     std::string_view remaining_regex;
 
-    bool operator==(const ParseValue& other) const
+    inline bool operator==(const ParseValue& other) const
     {
         return value == other.value && remaining_regex == other.remaining_regex;
     }
-    bool operator!=(const ParseValue& other) const
+    inline bool operator!=(const ParseValue& other) const
     {
         return !(*this == other);
     }

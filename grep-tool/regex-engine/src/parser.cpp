@@ -642,7 +642,17 @@ ParseResult<SubExpressionItem> parse_sub_expression_item(std::string_view regex)
             auto br_result = parse_backreference(regex);
             if (std::holds_alternative<ParseError>(br_result))
             {
-                return std::get<ParseError>(br_result);
+                auto match_result = parse_match(regex);
+                if (std::holds_alternative<ParseError>(match_result))
+                {
+                    ParseError error{"Expected an anchor or a backreference or a match at the beginning of sub-expression item\n"};
+                    error += "  Anchor parse error: " + std::get<ParseError>(a_result);
+                    error += "\n  Backreference parse error: " + std::get<ParseError>(br_result);
+                    error += "\n  Match parse error: " + std::get<ParseError>(match_result);
+                    return error;
+                }
+                auto& [match, remaining_regex_after_match] = std::get<ParseValue<Match>>(match_result);
+                return ParseValue<SubExpressionItem>{SubExpressionItem{match}, remaining_regex_after_match};
             }
             auto& [backreference, remaining_regex_after_br] = std::get<ParseValue<Backreference>>(br_result);
             return ParseValue<SubExpressionItem>{SubExpressionItem{backreference}, remaining_regex_after_br};

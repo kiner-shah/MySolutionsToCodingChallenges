@@ -3,6 +3,7 @@
 
 #include <doctest.h>
 #include "parser.hpp"
+#include "nfa.hpp"
 
 template<typename T>
 void expect_ok(const kregex::ParseResult<T>& result, const kregex::ParseValue<T>& expected)
