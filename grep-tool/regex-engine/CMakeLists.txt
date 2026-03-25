@@ -4,7 +4,7 @@ project(RegexEngine CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-add_library(KRegexEngine STATIC src/parser.cpp src/nfa.cpp)
+add_library(KRegexEngine STATIC src/parser.cpp src/nfa.cpp src/matcher.cpp)
 
 target_include_directories(KRegexEngine PUBLIC include)
 if (WIN32 OR MSVC)

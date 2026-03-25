@@ -72,7 +72,9 @@ enum class CharacterClassType
     AnyWord,
     AnyWordInverted,
     AnyDecimalDigit,
-    AnyDecimalDigitInverted
+    AnyDecimalDigitInverted,
+    AnyWhitespace,
+    AnyWhitespaceInverted
 };
 
 struct CharacterClass

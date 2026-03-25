@@ -67,6 +67,8 @@ TEST_CASE("Parse character class")
 {
     expect_ok(parse_character_class("\\d"), ParseValue<CharacterClass>{CharacterClass{CharacterClassType::AnyDecimalDigit}, ""});
     expect_ok(parse_character_class("\\D"), ParseValue<CharacterClass>{CharacterClass{CharacterClassType::AnyDecimalDigitInverted}, ""});
+    expect_ok(parse_character_class("\\s"), ParseValue<CharacterClass>{CharacterClass{CharacterClassType::AnyWhitespace}, ""});
+    expect_ok(parse_character_class("\\S"), ParseValue<CharacterClass>{CharacterClass{CharacterClassType::AnyWhitespaceInverted}, ""});
     expect_ok(parse_character_class("\\w"), ParseValue<CharacterClass>{CharacterClass{CharacterClassType::AnyWord}, ""});
     expect_ok(parse_character_class("\\W"), ParseValue<CharacterClass>{CharacterClass{CharacterClassType::AnyWordInverted}, ""});
     expect_error(parse_character_class("d"));

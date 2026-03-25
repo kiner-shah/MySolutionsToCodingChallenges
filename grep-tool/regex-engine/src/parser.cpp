@@ -284,6 +284,12 @@ ParseResult<CharacterClass> parse_character_class(std::string_view regex)
     case 'D':
         type = CharacterClassType::AnyDecimalDigitInverted;
         break;
+    case 's':
+        type = CharacterClassType::AnyWhitespace;
+        break;
+    case 'S':
+        type = CharacterClassType::AnyWhitespaceInverted;
+        break;
     default:
         return ParseError{"Invalid character class type"};
     }

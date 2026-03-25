@@ -384,3 +384,30 @@ TEST_CASE("Build regex with character class")
     REQUIRE(classes.size() == 1);
     CHECK(classes.front().type == CharacterClassType::AnyDecimalDigit);
 }
+
+TEST_CASE("Build regex with whitespace character classes")
+{
+	Nfa whitespace_nfa;
+	whitespace_nfa.build_regex(parse_regex_or_fail("\\s"));
+	const auto& whitespace_states = whitespace_nfa.get_states();
+
+	CHECK(whitespace_states.size() == 4);
+	CHECK(count_transitions(whitespace_states) == 3);
+	CHECK(count_transitions_of_type<CharacterClass>(whitespace_states) == 1);
+
+	const auto whitespace_classes = collect_transition_values<CharacterClass>(whitespace_states);
+	REQUIRE(whitespace_classes.size() == 1);
+	CHECK(whitespace_classes.front().type == CharacterClassType::AnyWhitespace);
+
+	Nfa non_whitespace_nfa;
+	non_whitespace_nfa.build_regex(parse_regex_or_fail("\\S"));
+	const auto& non_whitespace_states = non_whitespace_nfa.get_states();
+
+	CHECK(non_whitespace_states.size() == 4);
+	CHECK(count_transitions(non_whitespace_states) == 3);
+	CHECK(count_transitions_of_type<CharacterClass>(non_whitespace_states) == 1);
+
+	const auto non_whitespace_classes = collect_transition_values<CharacterClass>(non_whitespace_states);
+	REQUIRE(non_whitespace_classes.size() == 1);
+	CHECK(non_whitespace_classes.front().type == CharacterClassType::AnyWhitespaceInverted);
+}
