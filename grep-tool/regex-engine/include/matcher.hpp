@@ -69,55 +69,56 @@ class Matcher
         StateId to_state_id,
         const Char& character,
         std::u32string_view input,
-        bool negate = false);
+        bool negate = false) const;
     std::optional<TransitionResult> process_character_class_transition(
         MatchState& match_state,
         StateId to_state_id,
         const CharacterClass& character_class,
         std::u32string_view input,
-        bool negate = false);
+        bool negate = false) const;
     std::optional<TransitionResult> process_character_range_transition(
         MatchState& match_state,
         StateId to_state_id,
         const CharacterRange& character_range,
         std::u32string_view input,
-        bool negate = false);
+        bool negate = false) const;
     std::optional<TransitionResult> process_unicode_category_name_transition(
         MatchState& match_state,
         StateId to_state_id,
         const UnicodeCategoryName& unicode_category_name,
         std::u32string_view input,
-        bool negate = false);
+        bool negate = false) const;
     std::optional<TransitionResult> process_character_group_transition(
         MatchState& match_state,
         StateId to_state_id,
         const CharacterGroup& character_group,
-        std::u32string_view input);
+        std::u32string_view input) const;
     std::optional<TransitionResult> process_anchor_transition(
         MatchState& match_state,
         StateId to_state_id,
         const Anchor& anchor,
-        std::u32string_view input);
+        std::u32string_view input) const;
     std::optional<TransitionResult> process_start_of_string_anchor_transition(
         MatchState& match_state,
         StateId to_state_id,
         const StartOfStringAnchor& start_of_string_anchor,
-        std::u32string_view input);
+        std::u32string_view input) const;
     std::optional<TransitionResult> process_group_capture_start_transition(
         MatchState& match_state,
         StateId to_state_id,
         const GroupCaptureStart& group_capture_start,
-        std::u32string_view input);
+        std::u32string_view input) const;
     std::optional<TransitionResult> process_group_capture_end_transition(
         MatchState& match_state,
         StateId to_state_id,
         const GroupCaptureEnd& group_capture_end,
-        std::u32string_view input);
+        std::u32string_view input) const;
     std::optional<TransitionResult> process_backreference_transition(
         MatchState& match_state,
         StateId to_state_id,
         const Backreference& backreference,
-        std::u32string_view input);
+        std::u32string_view input) const;
+    std::optional<MatchResult> match_one_from(std::u32string_view input, std::size_t start_position) const;
 public:
     Matcher(const NfaElement& regex_nfa_element, const std::vector<State>& states);
     std::optional<TransitionResult> process_transition(
@@ -125,9 +126,9 @@ public:
         StateId to_state_id,
         const TransitionConditionType& transition_condition,
         std::u32string_view input,
-        bool negate = false);
-    std::optional<MatchResult> match_one(std::u32string_view input);
-    std::vector<MatchResult> match_all(std::u32string_view input);
+        bool negate = false) const;
+    std::optional<MatchResult> match_one(std::u32string_view input) const;
+    std::vector<MatchResult> match_all(std::u32string_view input) const;
 };
 }   // namespace kregex
 

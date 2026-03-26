@@ -4,6 +4,8 @@ project(RegexEngine CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+option(KREGEX_ENGINE_BUILD_TESTS "Build tests" ON)
+
 add_library(KRegexEngine STATIC src/parser.cpp src/nfa.cpp src/matcher.cpp)
 
 target_include_directories(KRegexEngine PUBLIC include)
@@ -16,5 +18,7 @@ elseif (UNIX)
     target_link_libraries(KRegexEngine PRIVATE -lasan)
 endif()
 
-enable_testing() # Enable CTest support
-add_subdirectory(test)
+if (KREGEX_ENGINE_BUILD_TESTS)
+    enable_testing() # Enable CTest support
+    add_subdirectory(test)
+endif()

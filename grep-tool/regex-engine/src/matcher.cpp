@@ -17,11 +17,11 @@ std::optional<TransitionResult> Matcher::process_transition(
     StateId to_state_id,
     const TransitionConditionType& transition_condition,
     std::u32string_view input,
-    bool negate)
+    bool negate) const
 {
     struct Visitor
     {
-        std::reference_wrapper<Matcher> matcher;
+        std::reference_wrapper<const Matcher> matcher;
         std::reference_wrapper<MatchState> match_state;
         std::u32string_view input;
         StateId to_state_id;
@@ -80,10 +80,10 @@ std::optional<TransitionResult> Matcher::process_transition(
     return std::visit(visitor, transition_condition);
 }
 
-std::optional<MatchResult> Matcher::match_one(std::u32string_view input)
+std::optional<MatchResult> Matcher::match_one_from(std::u32string_view input, std::size_t start_position) const
 {
     MatchResult result{};
-    MatchState current_match_state{input, 0, m_regex_nfa_element.start, {}};
+    MatchState current_match_state{input, start_position, m_regex_nfa_element.start, {}};
     std::queue<MatchState> states_to_process;
     std::set<std::tuple<StateId, std::size_t, std::vector<Range>>> visited_states;  // tuple of state id, input position, and group ranges
 
@@ -125,7 +125,7 @@ std::optional<MatchResult> Matcher::match_one(std::u32string_view input)
             }
             result.group_ranges = current_match_state.group_ranges ? *current_match_state.group_ranges : std::vector<Range>{};
             // Insert whole match range at beginning of list of group ranges
-            result.group_ranges.insert(result.group_ranges.begin(), Range{0, 0, current_match_state.input_position});
+            result.group_ranges.insert(result.group_ranges.begin(), Range{0, start_position, current_match_state.input_position});
             return result;
         }
 
@@ -154,13 +154,18 @@ std::optional<MatchResult> Matcher::match_one(std::u32string_view input)
     return std::nullopt;
 }
 
-std::vector<MatchResult> Matcher::match_all(std::u32string_view input)
+std::optional<MatchResult> Matcher::match_one(std::u32string_view input) const
+{
+    return match_one_from(input, 0);
+}
+
+std::vector<MatchResult> Matcher::match_all(std::u32string_view input) const
 {
     std::vector<MatchResult> results{};
     std::size_t i = 0;
     do
     {
-        auto result = match_one(input.substr(i));
+        auto result = match_one_from(input, i);
         if (!result.has_value())
         {
             i++;
@@ -175,7 +180,12 @@ std::vector<MatchResult> Matcher::match_all(std::u32string_view input)
     return results;
 }
 
-std::optional<TransitionResult> Matcher::process_char_transition(MatchState& match_state, StateId to_state_id, const Char &character, std::u32string_view input, bool negate)
+std::optional<TransitionResult> Matcher::process_char_transition(
+    MatchState& match_state,
+    StateId to_state_id,
+    const Char &character,
+    std::u32string_view input,
+    bool negate) const
 {
     if (input.empty())
     {
@@ -189,7 +199,12 @@ std::optional<TransitionResult> Matcher::process_char_transition(MatchState& mat
     return condition ? std::make_optional<TransitionResult>(TransitionResult{1, to_state_id}) : std::nullopt;
 }
 
-std::optional<TransitionResult> Matcher::process_character_class_transition(MatchState &match_state, StateId to_state_id, const CharacterClass &character_class, std::u32string_view input, bool negate)
+std::optional<TransitionResult> Matcher::process_character_class_transition(
+    MatchState &match_state,
+    StateId to_state_id,
+    const CharacterClass &character_class,
+    std::u32string_view input,
+    bool negate) const
 {
     if (input.empty())
     {
@@ -270,7 +285,12 @@ std::optional<TransitionResult> Matcher::process_character_class_transition(Matc
     return std::nullopt;
 }
 
-std::optional<TransitionResult> Matcher::process_character_range_transition(MatchState &match_state, StateId to_state_id, const CharacterRange &character_range, std::u32string_view input, bool negate)
+std::optional<TransitionResult> Matcher::process_character_range_transition(
+    MatchState &match_state,
+    StateId to_state_id,
+    const CharacterRange &character_range,
+    std::u32string_view input,
+    bool negate) const
 {
     if (input.empty())
     {
@@ -297,12 +317,21 @@ std::optional<TransitionResult> Matcher::process_character_range_transition(Matc
     return condition ? std::make_optional<TransitionResult>(TransitionResult{1, to_state_id}) : std::nullopt;
 }
 
-std::optional<TransitionResult> Matcher::process_unicode_category_name_transition(MatchState &match_state, StateId to_state_id, const UnicodeCategoryName &unicode_category_name, std::u32string_view input, bool negate)
+std::optional<TransitionResult> Matcher::process_unicode_category_name_transition(
+    MatchState &match_state,
+    StateId to_state_id,
+    const UnicodeCategoryName &unicode_category_name,
+    std::u32string_view input,
+    bool negate) const
 {
     throw std::runtime_error("Unicode category name transition processing not implemented");
 }
 
-std::optional<TransitionResult> Matcher::process_character_group_transition(MatchState &match_state, StateId to_state_id, const CharacterGroup &character_group, std::u32string_view input)
+std::optional<TransitionResult> Matcher::process_character_group_transition(
+    MatchState &match_state,
+    StateId to_state_id,
+    const CharacterGroup &character_group,
+    std::u32string_view input) const
 {
     if (input.empty())
     {
@@ -343,7 +372,11 @@ std::optional<TransitionResult> Matcher::process_character_group_transition(Matc
     return negate ? std::make_optional<TransitionResult>(TransitionResult{1, to_state_id}) : std::nullopt;
 }
 
-std::optional<TransitionResult> Matcher::process_anchor_transition(MatchState &match_state, StateId to_state_id, const Anchor &anchor, std::u32string_view input)
+std::optional<TransitionResult> Matcher::process_anchor_transition(
+    MatchState &match_state,
+    StateId to_state_id,
+    const Anchor &anchor,
+    std::u32string_view input) const
 {
     auto is_word = [](char32_t c)
     {
@@ -451,12 +484,19 @@ std::optional<TransitionResult> Matcher::process_anchor_transition(MatchState &m
     return std::optional<TransitionResult>();
 }
 
-std::optional<TransitionResult> Matcher::process_start_of_string_anchor_transition(MatchState& match_state, StateId to_state_id, const StartOfStringAnchor& start_of_string_anchor, std::u32string_view input)
+std::optional<TransitionResult> Matcher::process_start_of_string_anchor_transition(
+    MatchState& match_state,
+    StateId to_state_id,
+    const StartOfStringAnchor& start_of_string_anchor,
+    std::u32string_view input) const
 {
     return match_state.input_position == 0 ? std::make_optional<TransitionResult>(TransitionResult{0, to_state_id}) : std::nullopt;
 }
 
-std::optional<TransitionResult> Matcher::process_group_capture_start_transition(MatchState& match_state, StateId to_state_id, const GroupCaptureStart& group_capture_start, std::u32string_view input)
+std::optional<TransitionResult> Matcher::process_group_capture_start_transition(
+    MatchState& match_state, StateId to_state_id,
+    const GroupCaptureStart& group_capture_start,
+    std::u32string_view input) const
 {
     if (!match_state.group_ranges)
     {
@@ -481,7 +521,11 @@ std::optional<TransitionResult> Matcher::process_group_capture_start_transition(
     return TransitionResult{0, to_state_id};
 }
 
-std::optional<TransitionResult> Matcher::process_group_capture_end_transition(MatchState& match_state, StateId to_state_id, const GroupCaptureEnd& group_capture_end, std::u32string_view input)
+std::optional<TransitionResult> Matcher::process_group_capture_end_transition(
+    MatchState& match_state,
+    StateId to_state_id,
+    const GroupCaptureEnd& group_capture_end,
+    std::u32string_view input) const
 {
     if (!match_state.group_ranges)
     {
@@ -505,7 +549,11 @@ std::optional<TransitionResult> Matcher::process_group_capture_end_transition(Ma
     return TransitionResult{0, to_state_id};
 }
 
-std::optional<TransitionResult> Matcher::process_backreference_transition(MatchState& match_state, StateId to_state_id, const Backreference& backreference, std::u32string_view input)
+std::optional<TransitionResult> Matcher::process_backreference_transition(
+    MatchState& match_state,
+    StateId to_state_id,
+    const Backreference& backreference,
+    std::u32string_view input) const
 {
     if (!match_state.group_ranges)
     {
@@ -536,5 +584,4 @@ std::optional<TransitionResult> Matcher::process_backreference_transition(MatchS
     }
     return std::nullopt;
 }
-
 } // namespace kregex
