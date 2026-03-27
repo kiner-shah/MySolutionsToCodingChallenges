@@ -1,0 +1,15 @@
+add_executable(KRegexParserTests src/parser_test.cpp)
+target_include_directories(KRegexParserTests PRIVATE include)
+target_link_libraries(KRegexParserTests PRIVATE KRegexEngine)
+
+add_executable(KRegexNfaTests src/nfa_test.cpp)
+target_include_directories(KRegexNfaTests PRIVATE include)
+target_link_libraries(KRegexNfaTests PRIVATE KRegexEngine)
+
+add_executable(KRegexMatcherTests src/matcher_test.cpp)
+target_include_directories(KRegexMatcherTests PRIVATE include)
+target_link_libraries(KRegexMatcherTests PRIVATE KRegexEngine)
+
+add_test(NAME KRegexParserTests COMMAND KRegexParserTests)
+add_test(NAME KRegexNfaTests COMMAND KRegexNfaTests)
+add_test(NAME KRegexMatcherTests COMMAND KRegexMatcherTests)
