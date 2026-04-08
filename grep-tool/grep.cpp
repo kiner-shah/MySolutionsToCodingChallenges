@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -316,7 +317,7 @@ bool process_one_file(
             {
                 if (file_path.has_value())
                 {
-                    std::cout << file_path.value() << ':';
+                    std::cout << file_path.value().generic_string() << ':';
                 }
                 std::cout << original_line << '\n';
                 any_match = true;

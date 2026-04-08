@@ -1,4 +1,5 @@
 #include "Client.hpp"
+#include <asio/write.hpp>
 
 namespace kredis
 {
@@ -41,7 +42,7 @@ void Client::handle_write(const asio::error_code &error, std::size_t bytes_trans
 
     if (!m_write_queue.empty())
     {
-        m_socket.async_write_some(
+        asio::async_write(m_socket,
             asio::buffer(m_write_queue.front()),
             [self = shared_from_this()](const asio::error_code& error, std::size_t bytes_transferred)
             {
@@ -107,7 +108,7 @@ void Client::write(std::string payload)
 
     if (!write_in_progress)
     {
-        m_socket.async_write_some(
+        asio::async_write(m_socket,
             asio::buffer(m_write_queue.front()),
             [self = shared_from_this()](const asio::error_code& error, std::size_t bytes_transferred)
             {

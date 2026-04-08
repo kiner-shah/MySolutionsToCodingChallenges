@@ -32,7 +32,7 @@ class Server
     RespGenerator m_resp_generator;
     CommandProcessor m_command_processor;
 
-    void write_to_client(std::string message, const std::string& client_id);
+    void write_to_client(std::string&& message, const std::string& client_id);
     void handle_accept(const asio::error_code& error, std::string client_id);
     std::tuple<bool, std::size_t> on_read_done(std::string_view, asio::error_code, std::size_t, const std::string&);
 

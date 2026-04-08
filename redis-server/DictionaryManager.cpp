@@ -29,7 +29,7 @@ void DictionaryManager::try_remove_expired_keys()
         entries_with_expiry.end(),
         std::back_inserter(random_sample),
         5,  // sample size is 5
-        std::mt19937{std::random_device{}()});
+        m_rng_engine);
     
     std::size_t expired_count = 0;
     std::vector<std::string> keys_to_remove;
@@ -89,7 +89,8 @@ bool DictionaryManager::has_expired(const DictionaryValue& value) const
 DictionaryManager::DictionaryManager(std::uint64_t expiry_checking_period_seconds)
     : m_work_guard{asio::make_work_guard(m_io_context)},
     m_timer{m_io_context, std::chrono::seconds(expiry_checking_period_seconds)},
-    m_expiry_checking_period_seconds{expiry_checking_period_seconds}
+    m_expiry_checking_period_seconds{expiry_checking_period_seconds},
+    m_rng_engine{m_random_device()}
 {
     m_io_context_thread = std::thread([this]() { m_io_context.run(); });
     load();
@@ -125,15 +126,11 @@ RespTypePtr DictionaryManager::get(const std::string &key)
         return std::make_shared<RespType>(RespNull{});
     }
     // TODO: is it needed to cancel here? Can the timer be kept running?
-    m_timer.cancel();
+    // m_timer.cancel();
     if (has_expired(it->second))
     {
         read_lock.unlock();
         remove(key);
-        m_timer.async_wait([self = shared_from_this()](const asio::error_code& error)
-        {
-            self->handle_timer_complete(error);
-        });
         return std::make_shared<RespType>(RespNull{});
     }
     if (!std::holds_alternative<RespString>(*it->second.m_value))
@@ -154,7 +151,7 @@ RespTypePtr DictionaryManager::increment(const std::string &key)
         return std::make_shared<RespType>(RespNull{});
     }
     // TODO: is it needed to cancel here? Can the timer be kept running?
-    m_timer.cancel();
+    // m_timer.cancel();
     if (has_expired(it->second))
     {
         read_lock.unlock();
@@ -190,7 +187,7 @@ RespTypePtr DictionaryManager::decrement(const std::string &key)
         return std::make_shared<RespType>(RespNull{});
     }
     // TODO: is it needed to cancel here? Can the timer be kept running?
-    m_timer.cancel();
+    // m_timer.cancel();
     if (has_expired(it->second))
     {
         read_lock.unlock();

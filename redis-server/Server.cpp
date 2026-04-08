@@ -5,12 +5,12 @@
 
 namespace kredis
 {
-void Server::write_to_client(std::string message, const std::string &client_id)
+void Server::write_to_client(std::string&& message, const std::string &client_id)
 {
     auto client_ptr = m_client_manager.get_client(client_id);
     if (client_ptr)
     {
-        client_ptr->write(message);
+        client_ptr->write(std::move(message));
     }
 }
 

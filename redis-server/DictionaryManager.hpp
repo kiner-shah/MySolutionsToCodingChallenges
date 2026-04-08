@@ -5,6 +5,7 @@
 #include <string>
 #include <memory>
 #include <thread>
+#include <random>
 #include <asio/io_context.hpp>
 #include <asio/steady_timer.hpp>
 #include "DictionaryValue.hpp"
@@ -21,6 +22,8 @@ class DictionaryManager : public std::enable_shared_from_this<DictionaryManager>
     std::thread m_io_context_thread;
     asio::steady_timer m_timer;
     std::uint64_t m_expiry_checking_period_seconds;
+    std::random_device m_random_device;
+    std::mt19937 m_rng_engine;
 
     DictionaryType m_dictionary;
     mutable std::shared_mutex m_shared_mutex;

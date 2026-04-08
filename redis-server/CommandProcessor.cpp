@@ -178,7 +178,6 @@ bool CommandProcessor::process(const RespType& command, RespTypePtr& response)
     {
         if (array.size() >= 2)
         {
-            std::vector<RespString> keys_to_check{array.size() - 1};
             RespInt exists_count = 0;
             for (std::size_t index = 1; index < array.size(); index++)
             {
@@ -195,7 +194,6 @@ bool CommandProcessor::process(const RespType& command, RespTypePtr& response)
     {
         if (array.size() >= 2)
         {
-            std::vector<RespString> keys_to_delete{array.size() - 1};
             RespInt remove_count = 0;
             for (std::size_t index = 1; index < array.size(); index++)
             {
