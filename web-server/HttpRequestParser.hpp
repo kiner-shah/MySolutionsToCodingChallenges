@@ -5,5 +5,5 @@
 
 namespace kweb_server
 {
-std::optional<HttpRequest> parse(const std::array<unsigned char, 2048>& raw_request);
+std::optional<HttpRequest> parse(const std::string_view& input);
 }   // namespace kweb_server

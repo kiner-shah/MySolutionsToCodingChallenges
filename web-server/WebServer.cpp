@@ -1,5 +1,8 @@
 #include "WebServer.hpp"
 #include <charconv>
+#include <filesystem>
+#include <fstream>
+#include <iostream>
 #include <spdlog/sinks/stdout_color_sinks.h>
 
 namespace
@@ -111,12 +114,60 @@ std::optional<kweb_server::HttpRequest> normalize_request(const kweb_server::Htt
     }
     return kweb_server::HttpRequest{request.get_method(), path};
 }
+
+std::optional<kweb_server::HttpResponse> try_handle_static_file_request(const kweb_server::HttpRequest& request, const std::string& www_root)
+{
+    namespace fs = std::filesystem;
+    
+    if (request.get_method() != kweb_server::HttpMethod::Get)
+    {
+        return std::nullopt;
+    }
+
+    fs::path canonical_root_path = fs::canonical(fs::path{www_root});
+    fs::path file_path = fs::path{www_root};
+    file_path /= request.get_path() == "/" ? "index.html" : request.get_path().substr(1); // remove leading slash
+    file_path = fs::weakly_canonical(file_path);
+
+    const std::string canonical_root_path_str = canonical_root_path.string();
+    const std::string file_path_str = file_path.string();
+    bool inside_root_path = false;
+    if (canonical_root_path_str == file_path_str
+        || (canonical_root_path_str.size() < file_path_str.size()
+        && file_path_str.compare(0, canonical_root_path_str.size(), canonical_root_path_str) == 0
+        && file_path_str.at(canonical_root_path_str.size()) == '/'))
+    {
+        inside_root_path = true;
+    }
+
+    if (!inside_root_path)
+    {
+        return std::nullopt;
+    }
+
+    const fs::file_status file_status = fs::symlink_status(file_path);
+    bool is_regular_file = file_status.type() != fs::file_type::none
+                        && file_status.type() != fs::file_type::not_found
+                        && file_status.type() != fs::file_type::directory
+                        && file_status.type() == fs::file_type::regular;
+    if (!is_regular_file)
+    {
+        return std::nullopt;
+    }
+    std::ifstream input_file{file_path, std::ios::binary};
+    if (!input_file)
+    {
+        return std::nullopt;
+    }
+    std::string file_contents{std::istreambuf_iterator<char>(input_file), std::istreambuf_iterator<char>()};
+    return kweb_server::HttpResponse{kweb_server::HttpStatusCode::Ok, std::move(file_contents)};
+}
 }   // namespace
 
 namespace kweb_server
 {
 void WebServer::handle_client_read(
-    const std::array<unsigned char, 2048>& read_buffer,
+    std::string_view read_buffer,
     const asio::error_code& error,
     std::size_t bytes_transferred,
     const std::string& client_id)
@@ -135,12 +186,13 @@ void WebServer::handle_client_read(
         m_logger->error("Received read event for non-existent client {}", client_id);
         return;
     }
-    std::optional<HttpRequest> request = HttpRequest::parse(read_buffer);
+    std::optional<HttpRequest> request = HttpRequest::parse(read_buffer.substr(0, bytes_transferred));
     if (!request)
     {
         m_logger->error("Failed to parse request from client {}", client_id);
         HttpResponse response{HttpStatusCode::BadRequest, ""};
-        client_ptr->write(response.to_raw_response());
+        const auto raw_response = response.to_raw_response();
+        client_ptr->write(raw_response, raw_response.size());
         return;
     }
     auto normalized_request = normalize_request(*request);
@@ -148,7 +200,8 @@ void WebServer::handle_client_read(
     {
         m_logger->error("Failed to normalize request [Method: {}, Path: {}] from client {}", static_cast<int>(request->get_method()), request->get_path(), client_id);
         HttpResponse response{HttpStatusCode::BadRequest, ""};
-        client_ptr->write(response.to_raw_response());
+        const auto raw_response = response.to_raw_response();
+        client_ptr->write(raw_response, raw_response.size());
         return;
     }
     m_logger->info("Received request [Method: {}, Path: {}] from client {}", static_cast<int>(normalized_request->get_method()), normalized_request->get_path(), client_id);
@@ -156,19 +209,30 @@ void WebServer::handle_client_read(
     auto handler_it = m_handlers.find(*normalized_request);
     if (handler_it == m_handlers.end())
     {
-        m_logger->error("No handler found for request [Method: {}, Path: {}]", static_cast<int>(request->get_method()), request->get_path());
-        HttpResponse response{HttpStatusCode::NotFound, ""};
-        client_ptr->write(response.to_raw_response());
+        auto static_file_response = try_handle_static_file_request(*normalized_request, m_www_root);
+        if (!static_file_response)
+        {
+            m_logger->error("No handler found for request [Method: {}, Path: {}]", static_cast<int>(request->get_method()), request->get_path());
+            HttpResponse response{HttpStatusCode::NotFound, ""};
+            const auto raw_response = response.to_raw_response();
+            client_ptr->write(raw_response, raw_response.size());
+        }
+        else
+        {
+            const auto raw_response = static_file_response->to_raw_response();
+            client_ptr->write(raw_response, raw_response.size());
+        }
     }
     else
     {
         HttpResponse response = handler_it->second(*normalized_request);
-        client_ptr->write(response.to_raw_response());
+        const auto raw_response = response.to_raw_response();
+        client_ptr->write(raw_response, raw_response.size());
     }
 }
 
 void WebServer::handle_client_write(
-    const std::array<unsigned char, 2048>& /*write_buffer*/,
+    const std::vector<unsigned char>& /*write_buffer*/,
     const asio::error_code& error,
     std::size_t /*bytes_transferred*/,
     const std::string& client_id)
@@ -208,13 +272,14 @@ void WebServer::handle_accept(const asio::error_code &error, const std::string &
     }
 }
 
-WebServer::WebServer(unsigned short port)
+WebServer::WebServer(unsigned short port, const std::string& www_root)
     : m_thread_pool{std::make_shared<ThreadPool>()},
       m_logger{spdlog::stdout_color_mt("WebServer")},
       m_client_manager{std::make_unique<ClientManager>()},
       m_endpoint_resolver{m_thread_pool->get_io_context()},
       m_signals{m_thread_pool->get_io_context()},
-      m_acceptor{m_thread_pool->get_io_context()}
+      m_acceptor{m_thread_pool->get_io_context()},
+      m_www_root{www_root}
 {
     m_logger->set_level(spdlog::level::info);
     m_logger->set_pattern("%Y-%m-%d %H:%M:%S | %n | %-8l | %v");

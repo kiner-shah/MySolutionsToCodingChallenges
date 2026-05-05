@@ -3,7 +3,7 @@
 
 namespace kweb_server
 {
-ClientPtr ClientManager::create_new_client(asio::io_context &io_context, ClientCallbackType on_read, ClientCallbackType on_write)
+ClientPtr ClientManager::create_new_client(asio::io_context &io_context, ClientReadCallbackType on_read, ClientWriteCallbackType on_write)
 {
     std::unique_lock<std::shared_mutex> lock{m_mutex};
     std::string client_id = "client_" + std::to_string(m_client_counter++);

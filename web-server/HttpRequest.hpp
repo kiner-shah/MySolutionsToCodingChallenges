@@ -1,9 +1,9 @@
 #pragma once
 
 #include "HttpMethods.hpp"
-#include <array>
 #include <optional>
 #include <string>
+#include <string_view>
 
 namespace kweb_server
 {
@@ -13,7 +13,7 @@ class HttpRequest
     std::string m_path;
 public:
     HttpRequest(HttpMethod method, const std::string& path);
-    static std::optional<HttpRequest> parse(const std::array<unsigned char, 2048>& raw_request);
+    static std::optional<HttpRequest> parse(const std::string_view& raw_request);
 
     bool operator==(const HttpRequest& other) const;
     HttpMethod get_method() const;

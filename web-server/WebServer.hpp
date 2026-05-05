@@ -27,12 +27,13 @@ class WebServer
     asio::ip::tcp::acceptor m_acceptor;
     std::atomic_bool m_is_stopped = false;
     std::unordered_map<HttpRequest, std::function<HttpResponse(const HttpRequest&)>> m_handlers;
+    std::string m_www_root;
 
-    void handle_client_read(const std::array<unsigned char, 2048>&, const asio::error_code&, std::size_t, const std::string&);
-    void handle_client_write(const std::array<unsigned char, 2048>&, const asio::error_code&, std::size_t, const std::string&);
+    void handle_client_read(std::string_view, const asio::error_code&, std::size_t, const std::string&);
+    void handle_client_write(const std::vector<unsigned char>&, const asio::error_code&, std::size_t, const std::string&);
     void handle_accept(const asio::error_code& error, const std::string& client_id);
 public:
-    WebServer(unsigned short port);
+    WebServer(unsigned short port, const std::string& www_root);
     ~WebServer();
     void accept();
     void start();
