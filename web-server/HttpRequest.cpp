@@ -8,7 +8,7 @@ HttpRequest::HttpRequest(HttpMethod method, const std::string &path)
 {
 }
 
-std::optional<HttpRequest> HttpRequest::parse(const std::array<unsigned char, 2048>& raw_request)
+std::optional<HttpRequest> HttpRequest::parse(const std::string_view& raw_request)
 {
     return kweb_server::parse(raw_request);
 }

@@ -50,9 +50,8 @@ std::optional<kweb_server::HttpMethod> parse_method(std::string_view method_str)
 
 namespace kweb_server
 {
-std::optional<HttpRequest> parse(const std::array<unsigned char, 2048> &raw_request)
+std::optional<HttpRequest> parse(const std::string_view& input)
 {
-    std::string_view input{reinterpret_cast<const char*>(raw_request.data()), raw_request.size()};
     auto pos = input.find("\r\n");
     if (pos == std::string_view::npos)
     {
