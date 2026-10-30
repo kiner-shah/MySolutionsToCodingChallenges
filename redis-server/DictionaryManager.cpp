@@ -113,8 +113,12 @@ void DictionaryManager::set(const std::string &key,
     RespTypePtr value,
     std::optional<std::uint64_t> timestamp)
 {
-    std::unique_lock<std::shared_mutex> lock{m_shared_mutex};
-    m_dictionary[key] = DictionaryValue {std::move(value), timestamp};
+    DictionaryValue replacement{std::move(value), timestamp};
+    {
+        std::unique_lock<std::shared_mutex> lock{m_shared_mutex};
+        auto& entry = m_dictionary[key];
+        std::swap(entry, replacement);
+    }
 }
 
 RespTypePtr DictionaryManager::get(const std::string &key)
@@ -325,6 +329,7 @@ bool DictionaryManager::save()
     {
         dictionary_snapshot.push_back(entry);
     }
+    lock.unlock();
     return m_rdb_manager.save(dictionary_snapshot);
 }
 

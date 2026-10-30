@@ -362,13 +362,13 @@ bool RespParser::parse(std::string_view input, std::vector<RespParserResult> &re
                 state = parse_null(input, resp_null, parse_end_pos);
                 if (state == RespParserState::Complete)
                 {
-                    result.emplace_back(resp_null, state, parse_start_pos, parse_end_pos);
+                    result.emplace_back(resp_null, state, parse_start_pos, parse_start_pos + parse_end_pos);
                 }
                 else if (state == RespParserState::Invalid)
                 {
                     if ((state = parse_bulk_string(input, resp_bulk_string, parse_end_pos)) == RespParserState::Complete)
                     {
-                        result.emplace_back(resp_bulk_string, state, parse_start_pos, parse_end_pos);
+                        result.emplace_back(std::move(resp_bulk_string), state, parse_start_pos, parse_start_pos + parse_end_pos);
                     }
                 }
                 break;
@@ -380,13 +380,13 @@ bool RespParser::parse(std::string_view input, std::vector<RespParserResult> &re
                 state = parse_null(input, resp_null, parse_end_pos);
                 if (state == RespParserState::Complete)
                 {
-                    result.emplace_back(resp_null, state, parse_start_pos, parse_end_pos);
+                    result.emplace_back(resp_null, state, parse_start_pos, parse_start_pos + parse_end_pos);
                 }
                 else if (state == RespParserState::Invalid)
                 {
                     if ((state = parse_array(input, resp_array, parse_end_pos)) == RespParserState::Complete)
                     {
-                        result.emplace_back(resp_array, state, parse_start_pos, parse_end_pos);
+                        result.emplace_back(std::move(resp_array), state, parse_start_pos, parse_start_pos + parse_end_pos);
                     }
                 }
                 break;
@@ -396,7 +396,7 @@ bool RespParser::parse(std::string_view input, std::vector<RespParserResult> &re
                 RespInt resp_int;
                 if ((state = parse_integer(input, resp_int, parse_end_pos)) == RespParserState::Complete)
                 {
-                    result.emplace_back(resp_int, state, parse_start_pos, parse_end_pos);
+                    result.emplace_back(resp_int, state, parse_start_pos, parse_start_pos + parse_end_pos);
                 }
                 break;
             }
@@ -405,7 +405,7 @@ bool RespParser::parse(std::string_view input, std::vector<RespParserResult> &re
                 RespString resp_simple_string;
                 if ((state = parse_simple_string(input, resp_simple_string, parse_end_pos)) == RespParserState::Complete)
                 {
-                    result.emplace_back(resp_simple_string, state, parse_start_pos, parse_end_pos);
+                    result.emplace_back(std::move(resp_simple_string), state, parse_start_pos, parse_start_pos + parse_end_pos);
                 }
                 break;
             }
@@ -414,7 +414,7 @@ bool RespParser::parse(std::string_view input, std::vector<RespParserResult> &re
                 RespError resp_error;
                 if ((state = parse_error(input, resp_error, parse_end_pos)) == RespParserState::Complete)
                 {
-                    result.emplace_back(resp_error, state, parse_start_pos, parse_end_pos);
+                    result.emplace_back(std::move(resp_error), state, parse_start_pos, parse_start_pos + parse_end_pos);
                 }
                 break;
             }

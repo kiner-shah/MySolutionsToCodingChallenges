@@ -6,6 +6,7 @@ int main()
     kredis::Server server;
     try
     {
+        std::cout << "Starting Redis server\n";
         server.start();
     }
     catch(const std::exception& e)
