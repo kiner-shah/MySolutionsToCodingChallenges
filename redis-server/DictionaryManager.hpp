@@ -1,11 +1,14 @@
 #pragma once
 
 #include <unordered_map>
-#include <shared_mutex>
+#include <mutex>
+#include <array>
+#include <vector>
 #include <string>
 #include <memory>
 #include <thread>
 #include <random>
+#include <optional>
 #include <asio/io_context.hpp>
 #include <asio/steady_timer.hpp>
 #include "DictionaryValue.hpp"
@@ -25,10 +28,19 @@ class DictionaryManager : public std::enable_shared_from_this<DictionaryManager>
     std::random_device m_random_device;
     std::mt19937 m_rng_engine;
 
-    DictionaryType m_dictionary;
-    mutable std::shared_mutex m_shared_mutex;
+    struct DictionaryShard
+    {
+        DictionaryType m_dictionary;
+        mutable std::mutex m_mutex;
+    };
+    std::array<DictionaryShard, 8> m_dictionary_shards;
+
     RdbManager m_rdb_manager;
 
+    std::size_t get_shard_index(const std::string& key) const;
+    void set_shard_entry(const std::string& key, DictionaryValue value);
+    std::size_t remove_shard_entry(const std::string& key);
+    std::optional<std::reference_wrapper<const DictionaryValue>> get_shard_entry(const std::string& key);
     void try_remove_expired_keys();
     void handle_timer_complete(const asio::error_code& error);
     void stop();
