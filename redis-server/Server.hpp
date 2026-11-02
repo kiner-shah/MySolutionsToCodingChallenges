@@ -37,7 +37,7 @@ class Server
     std::tuple<bool, std::size_t> on_read_done(std::string_view, asio::error_code, std::size_t, const std::string&);
 
 public:
-    Server();
+    Server(unsigned int workers, unsigned int port);
     ~Server();
     void start();
     void stop();

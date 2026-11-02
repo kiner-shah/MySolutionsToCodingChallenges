@@ -34,13 +34,13 @@ class DictionaryManager : public std::enable_shared_from_this<DictionaryManager>
         mutable std::mutex m_mutex;
     };
     std::array<DictionaryShard, 8> m_dictionary_shards;
+    mutable std::mutex m_save_mutex;
 
     RdbManager m_rdb_manager;
 
     std::size_t get_shard_index(const std::string& key) const;
     void set_shard_entry(const std::string& key, DictionaryValue value);
     std::size_t remove_shard_entry(const std::string& key);
-    std::optional<std::reference_wrapper<const DictionaryValue>> get_shard_entry(const std::string& key);
     void try_remove_expired_keys();
     void handle_timer_complete(const asio::error_code& error);
     void stop();

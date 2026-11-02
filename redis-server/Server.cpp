@@ -123,11 +123,11 @@ std::tuple<bool, std::size_t> Server::on_read_done(std::string_view message, asi
     return std::make_tuple(!wait_for_next_read, last_processed_index);
 }
 
-Server::Server()
+Server::Server(unsigned int workers, unsigned int port)
     : m_signals{m_io_context},
     m_acceptor{m_io_context},
     m_logger{spdlog::stdout_color_mt("RedisServer")},
-    m_client_manager{m_logger},
+    m_client_manager{m_logger, workers},
     m_resp_parser{m_logger},
     m_resp_generator{m_logger},
     m_command_processor{m_logger}
@@ -144,7 +144,8 @@ Server::Server()
     });
 
     asio::ip::tcp::resolver endpoint_resolver{m_acceptor.get_executor()};
-    asio::ip::tcp::endpoint endpoint = *endpoint_resolver.resolve("0.0.0.0", "6379").begin();
+    const std::string port_str = std::to_string(port);
+    asio::ip::tcp::endpoint endpoint = *endpoint_resolver.resolve("0.0.0.0", port_str).begin();
     m_acceptor.open(endpoint.protocol());
     m_acceptor.set_option(asio::ip::tcp::acceptor::reuse_address{true});
     m_acceptor.bind(endpoint);

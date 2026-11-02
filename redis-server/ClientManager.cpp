@@ -2,9 +2,9 @@
 
 namespace kredis
 {
-ClientManager::ClientManager(std::shared_ptr<spdlog::logger> logger)
+ClientManager::ClientManager(std::shared_ptr<spdlog::logger> logger, unsigned int workers)
     : m_work_guard{asio::make_work_guard(m_io_context)},
-    m_threads(std::thread::hardware_concurrency()),
+    m_threads(workers),
     m_logger{std::move(logger)},
     m_client_counter{0}
 {

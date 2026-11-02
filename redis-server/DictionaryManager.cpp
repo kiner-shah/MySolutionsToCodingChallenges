@@ -29,21 +29,14 @@ std::size_t DictionaryManager::remove_shard_entry(const std::string &key)
     auto& shard = m_dictionary_shards[get_shard_index(key)];
     {
         std::scoped_lock<std::mutex> lock{shard.m_mutex};
-        return shard.m_dictionary.erase(key);
-    }
-}
-
-std::optional<std::reference_wrapper<const DictionaryValue>> DictionaryManager::get_shard_entry(const std::string &key)
-{
-    const auto& shard = m_dictionary_shards[get_shard_index(key)];
-    {
-        std::scoped_lock<std::mutex> lock{shard.m_mutex};
         auto it = shard.m_dictionary.find(key);
         if (it == shard.m_dictionary.end())
         {
-            return std::nullopt;
+            return 0;
         }
-        return std::cref(it->second);
+        bool expired = has_expired(it->second);
+        shard.m_dictionary.erase(it);
+        return expired ? 0 : 1;
     }
 }
 
@@ -57,14 +50,21 @@ void DictionaryManager::try_remove_expired_keys()
     {
         auto& shard = m_dictionary_shards[shard_index_to_inspect];
         bool continue_same_shard = true;
-        while (continue_same_shard)
+        std::size_t sample_count = 0;
+        const std::size_t max_sample_count = 10;
+        while (continue_same_shard && sample_count < max_sample_count)
         {
+            ++sample_count;
             std::unique_lock<std::mutex> lock{shard.m_mutex};
+            if (shard.m_dictionary.empty())
+            {
+                break;
+            }
             std::size_t inspect_count = 0;
             const std::size_t max_inspect_count = 15;
             std::vector<std::string> keys_to_remove{};
 
-            std::uniform_int_distribution<std::size_t> bdist{0, shard.m_dictionary.bucket_count()};
+            std::uniform_int_distribution<std::size_t> bdist{0, shard.m_dictionary.bucket_count() - 1};
             std::size_t random_bucket_index = bdist(m_rng_engine);
 
             for (std::size_t bucket_index = 0; bucket_index < shard.m_dictionary.bucket_count(); bucket_index++)
@@ -87,16 +87,18 @@ void DictionaryManager::try_remove_expired_keys()
                     }
                 }
             }
+
+            for (const auto& key : keys_to_remove)
+            {
+                shard.m_dictionary.erase(key);
+            }
+
             if (inspect_count < 5)
             {
                 continue_same_shard = false;
                 break;
             }
 
-            for (const auto& key : keys_to_remove)
-            {
-                shard.m_dictionary.erase(key);
-            }
             bool threshold_exceeded = keys_to_remove.size() * 100 > inspect_count * 20;
             if (!threshold_exceeded)
             {
@@ -139,7 +141,7 @@ bool DictionaryManager::has_expired(const DictionaryValue& value) const
         return false;
     }
     auto current_timestamp = get_current_time<std::chrono::milliseconds>();
-    return current_timestamp > value.m_expiry_timestamp;
+    return current_timestamp >= value.m_expiry_timestamp;
 }
 
 DictionaryManager::DictionaryManager(std::uint64_t expiry_checking_period_seconds)
@@ -174,18 +176,19 @@ void DictionaryManager::set(const std::string &key,
 
 RespTypePtr DictionaryManager::get(const std::string &key)
 {
-    auto optional_entry = get_shard_entry(key);
-    if (!optional_entry.has_value())
+    auto& shard = m_dictionary_shards[get_shard_index(key)];
+    std::scoped_lock<std::mutex> lock{shard.m_mutex};
+    auto it = shard.m_dictionary.find(key);
+    if (it == shard.m_dictionary.end())
     {
         return std::make_shared<RespType>(RespNull{});
     }
-    auto& entry = optional_entry->get();
-
+    const auto& entry = it->second;
     // TODO: is it needed to cancel here? Can the timer be kept running?
     // m_timer.cancel();
     if (has_expired(entry))
     {
-        remove(key);
+        shard.m_dictionary.erase(key);
         return std::make_shared<RespType>(RespNull{});
     }
     if (!std::holds_alternative<RespString>(*entry.m_value))
@@ -199,75 +202,88 @@ RespTypePtr DictionaryManager::increment(const std::string &key)
 {
     // If exists and is a number, then increment
     // If not exists or expired, then set to 1
-    auto optional_entry = get_shard_entry(key);
-    if (!optional_entry.has_value())
+    auto& shard = m_dictionary_shards[get_shard_index(key)];
+    std::scoped_lock<std::mutex> lock{shard.m_mutex};
+    auto it = shard.m_dictionary.find(key);
+    if (it == shard.m_dictionary.end() || has_expired(it->second))
     {
-        return std::make_shared<RespType>(RespNull{});
+        if (it != shard.m_dictionary.end())
+        {
+            shard.m_dictionary.erase(it);
+        }
+        auto value_ptr = std::make_shared<RespType>(RespString{"1", true});
+        shard.m_dictionary[key] = DictionaryValue{value_ptr, std::nullopt};
+        return std::make_shared<RespType>(RespInt{1});
     }
-    auto& entry = optional_entry->get();
+    auto& entry = it->second;
 
     // TODO: is it needed to cancel here? Can the timer be kept running?
     // m_timer.cancel();
-    if (has_expired(entry))
-    {
-        auto value_ptr = std::make_shared<RespType>(RespInt{1});
-        set(key, value_ptr);
-        return value_ptr;
-    }
     if (!std::holds_alternative<RespString>(*entry.m_value))
     {
         return std::make_shared<RespType>(RespError{invalid_operation});
     }
     RespString value = std::get<RespString>(*entry.m_value);
     auto int_value_opt = is_valid_signed_64_bit_int(value.m_str);
-    if (!int_value_opt.has_value())
+    if (!int_value_opt.has_value() || *int_value_opt == std::numeric_limits<std::int64_t>::max())
     {
         return std::make_shared<RespType>(RespError{invalid_operation});
     }
-    // TODO: check for overflow
-    auto new_value_ptr = std::make_shared<RespType>(RespString{std::to_string(int_value_opt.value() + 1), false});
-    set(key, new_value_ptr, entry.m_expiry_timestamp);
-    return new_value_ptr;
+    auto new_value = int_value_opt.value() + 1;
+    auto new_value_ptr = std::make_shared<RespType>(RespString{std::to_string(new_value), true});
+    entry.m_value = new_value_ptr;
+    return std::make_shared<RespType>(RespInt{new_value});
 }
 
 RespTypePtr DictionaryManager::decrement(const std::string &key)
 {
     // If exists and is a number, then decrement
     // If not exists or expired, then set to 1
-    auto optional_entry = get_shard_entry(key);
-    if (!optional_entry.has_value())
+    auto& shard = m_dictionary_shards[get_shard_index(key)];
+    std::scoped_lock<std::mutex> lock{shard.m_mutex};
+    auto it = shard.m_dictionary.find(key);
+    if (it == shard.m_dictionary.end() || has_expired(it->second))
     {
-        return std::make_shared<RespType>(RespNull{});
+        if (it != shard.m_dictionary.end())
+        {
+            shard.m_dictionary.erase(it);
+        }
+        auto value_ptr = std::make_shared<RespType>(RespString{"-1", true});
+        shard.m_dictionary[key] = DictionaryValue{value_ptr, std::nullopt};
+        return std::make_shared<RespType>(RespInt{-1});
     }
-    auto& entry = optional_entry->get();
+    auto& entry = it->second;
 
     // TODO: is it needed to cancel here? Can the timer be kept running?
     // m_timer.cancel();
-    if (has_expired(entry))
-    {
-        auto value_ptr = std::make_shared<RespType>(RespInt{1});
-        set(key, value_ptr);
-        return value_ptr;
-    }
     if (!std::holds_alternative<RespString>(*entry.m_value))
     {
         return std::make_shared<RespType>(RespError{invalid_operation});
     }
     RespString value = std::get<RespString>(*entry.m_value);
     auto int_value_opt = is_valid_signed_64_bit_int(value.m_str);
-    if (!int_value_opt.has_value())
+    if (!int_value_opt.has_value() || *int_value_opt == std::numeric_limits<std::int64_t>::min())
     {
         return std::make_shared<RespType>(RespError{invalid_operation});
     }
-    // TODO: check for underflow
-    auto new_value_ptr = std::make_shared<RespType>(RespString{std::to_string(int_value_opt.value() - 1), false});
-    set(key, new_value_ptr, entry.m_expiry_timestamp);
-    return new_value_ptr;
+    auto new_value = int_value_opt.value() - 1;
+    auto new_value_ptr = std::make_shared<RespType>(RespString{std::to_string(new_value), true});
+    entry = DictionaryValue{new_value_ptr, entry.m_expiry_timestamp};
+    return std::make_shared<RespType>(RespInt{new_value});
 }
 
 bool DictionaryManager::exists(const std::string &key)
 {
-    return get_shard_entry(key).has_value();
+    auto& shard = m_dictionary_shards[get_shard_index(key)];
+    std::scoped_lock<std::mutex> lock{shard.m_mutex};
+    auto it = shard.m_dictionary.find(key);
+    bool exists = it != shard.m_dictionary.end();
+    if (exists && has_expired(it->second))
+    {
+        shard.m_dictionary.erase(it);
+        exists = false;
+    }
+    return exists;
 }
 
 std::size_t DictionaryManager::remove(const std::string &key)
@@ -277,20 +293,27 @@ std::size_t DictionaryManager::remove(const std::string &key)
 
 RespTypePtr DictionaryManager::push_front(const std::string &key, const std::vector<RespString> &values)
 {
-    auto optional_entry = get_shard_entry(key);
-    if (!optional_entry.has_value())
+    auto& shard = m_dictionary_shards[get_shard_index(key)];
+    std::scoped_lock<std::mutex> lock{shard.m_mutex};
+    auto it = shard.m_dictionary.find(key);
+
+    if (it == shard.m_dictionary.end() || has_expired(it->second))
     {
+        if (it != shard.m_dictionary.end())
+        {
+            shard.m_dictionary.erase(it);
+        }
         RespArray new_list;
         for (const auto& val : values)
         {
             new_list.push_front(val);
         }
-        set_shard_entry(key, DictionaryValue{ std::make_shared<RespType>(new_list) });
+        shard.m_dictionary[key] = DictionaryValue{ std::make_shared<RespType>(new_list) };
         return std::make_shared<RespType>(RespInt{ static_cast<RespInt>(values.size()) });
     }
     else
     {
-        auto& entry = optional_entry->get();
+        auto& entry = it->second;
         if (!std::holds_alternative<RespArray>(*entry.m_value))
         {
             return std::make_shared<RespType>(RespError{invalid_operation});
@@ -306,20 +329,27 @@ RespTypePtr DictionaryManager::push_front(const std::string &key, const std::vec
 
 RespTypePtr DictionaryManager::push_back(const std::string &key, const std::vector<RespString> &values)
 {
-    auto optional_entry = get_shard_entry(key);
-    if (!optional_entry.has_value())
+    auto& shard = m_dictionary_shards[get_shard_index(key)];
+    std::scoped_lock<std::mutex> lock{shard.m_mutex};
+    auto it = shard.m_dictionary.find(key);
+
+    if (it == shard.m_dictionary.end() || has_expired(it->second))
     {
+        if (it != shard.m_dictionary.end())
+        {
+            shard.m_dictionary.erase(it);
+        }
         RespArray new_list;
         for (const auto& val : values)
         {
             new_list.push_back(val);
         }
-        set_shard_entry(key, DictionaryValue{ std::make_shared<RespType>(new_list) });
+        shard.m_dictionary[key] = DictionaryValue{ std::make_shared<RespType>(new_list) };
         return std::make_shared<RespType>(RespInt{ static_cast<RespInt>(values.size()) });
     }
     else
     {
-        auto& entry = optional_entry->get();
+        auto& entry = it->second;
         if (!std::holds_alternative<RespArray>(*entry.m_value))
         {
             return std::make_shared<RespType>(RespError{invalid_operation});
@@ -335,13 +365,20 @@ RespTypePtr DictionaryManager::push_back(const std::string &key, const std::vect
 
 RespTypePtr DictionaryManager::get_list(const std::string &key, int start_offset, int end_offset)
 {
-    auto optional_entry = get_shard_entry(key);
-    if (!optional_entry.has_value())
+    auto& shard = m_dictionary_shards[get_shard_index(key)];
+    std::scoped_lock<std::mutex> lock{shard.m_mutex};
+    auto it = shard.m_dictionary.find(key);
+    if (it == shard.m_dictionary.end())
     {
         return std::make_shared<RespType>(RespArray{});
     }
-    auto& entry = optional_entry->get();
+    auto& entry = it->second;
 
+    if (has_expired(entry))
+    {
+        shard.m_dictionary.erase(it);
+        return std::make_shared<RespType>(RespArray{});
+    }
 
     if (!std::holds_alternative<RespArray>(*entry.m_value))
     {
@@ -373,13 +410,24 @@ RespTypePtr DictionaryManager::get_list(const std::string &key, int start_offset
 
 bool DictionaryManager::save()
 {
+    std::scoped_lock<std::mutex> lock{m_save_mutex};
     std::vector<std::pair<std::string, DictionaryValue>> dictionary_snapshot;
-    for (const auto& shard : m_dictionary_shards)
     {
-        std::scoped_lock<std::mutex> lock{shard.m_mutex};
-        for (const auto& entry : shard.m_dictionary)
+        std::vector<std::unique_lock<std::mutex>> shard_locks;
+        shard_locks.reserve(m_dictionary_shards.size());
+        for (const auto& shard : m_dictionary_shards)
         {
-            dictionary_snapshot.push_back(entry);
+            shard_locks.emplace_back(shard.m_mutex);
+        }
+        for (const auto& shard : m_dictionary_shards)
+        {
+            for (const auto& entry : shard.m_dictionary)
+            {
+                dictionary_snapshot.emplace_back(entry.first, DictionaryValue {
+                    std::make_shared<RespType>(*entry.second.m_value),
+                    entry.second.m_expiry_timestamp
+                });
+            }
         }
     }
     return m_rdb_manager.save(dictionary_snapshot);
@@ -392,7 +440,9 @@ void DictionaryManager::load()
     {
         for (const auto& entry : *snapshot)
         {
-            set_shard_entry(entry.first, entry.second);
+            auto& shard = m_dictionary_shards[get_shard_index(entry.first)];
+            std::scoped_lock<std::mutex> lock{shard.m_mutex};
+            shard.m_dictionary[entry.first] = entry.second;
         }
     }
 }

@@ -23,7 +23,7 @@ class ClientManager
 
     std::shared_mutex m_clients_mutex;
 public:
-    ClientManager(std::shared_ptr<spdlog::logger> logger);
+    ClientManager(std::shared_ptr<spdlog::logger> logger, unsigned int workers);
     ~ClientManager();
     ClientPtr create_new_client(ReadCallbackType on_read);
     ClientPtr get_client(const std::string& id);
